@@ -1,8 +1,8 @@
 {
   "name": "neverless-rpg",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "private": true,
-  "description": "Discord-native Neverless mini RPG with Genshin-inspired gacha, domains, progression and role-based combat.",
+  "description": "Discord-native Neverless Adventure with Genshin-inspired gacha, domains, progression, farming, gear and role-based combat.",
   "type": "module",
   "main": "src/index.js",
   "scripts": {
