@@ -2,63 +2,100 @@ import { artifactSets, generateArtifact } from '../data/artifacts.js';
 import { domains } from '../data/domains.js';
 
 const DAY = 86_400_000;
+const randInt=(min,max,rng=Math.random)=>Math.floor(min + (max-min+1)*rng());
 
 export function characterLevelCost(level) {
   return 2500 + Math.max(1, level) * 450;
+}
+
+export function characterLevelBookCost(level) {
+  return level < 20 ? 1 : level < 40 ? 2 : level < 60 ? 3 : 4;
 }
 
 export function talentUpgradeCost(level) {
   return 12000 + Math.max(1, level) * 6500;
 }
 
+export function talentBookCost(level) {
+  return level <= 2 ? 1 : level <= 5 ? 2 : level <= 8 ? 3 : 4;
+}
+
+function ensureResources(player) {
+  player.books ||= { level: 0, talent: 0 };
+}
+
 export function grantDomainRewards(player, domainId, rng = Math.random, options = {}) {
   const domain = domains[domainId];
   if (!domain) return null;
+  ensureResources(player);
   player.domainProgress ||= {};
   const progress = player.domainProgress[domainId] ||= { clears: 0, fastestTurns: null, quickClears: 0 };
   const firstClear = progress.clears === 0;
   const [min,max] = domain.rewards.mora;
-  const mora = Math.floor(min + (max-min+1)*rng());
-  const setId = domain.setIds[Math.floor(rng()*domain.setIds.length)];
-  const rarity = domain.level >= 3 ? 5 : (rng() < 0.72 ? 5 : 4);
-  const artifact = generateArtifact(setId,rarity,rng);
+  const mora = randInt(min,max,rng);
+  const artifactCount = randInt(domain.rewards.artifacts?.[0] || 1, domain.rewards.artifacts?.[1] || 1, rng);
+  const artifacts = [];
+  for (let i = 0; i < artifactCount; i += 1) {
+    const setId = domain.setIds[Math.floor(rng()*domain.setIds.length)];
+    const rarity = domain.level >= 5 ? 5 : domain.level >= 3 ? (rng() < 0.84 ? 5 : 4) : (rng() < 0.65 ? 5 : 4);
+    const artifact = generateArtifact(setId,rarity,rng);
+    player.artifacts[artifact.id] = artifact;
+    artifacts.push(artifact);
+  }
+
   const basePrimos = domain.rewards.primogems;
   const firstClearBonus = firstClear ? (domain.firstClearPrimogems || 40) : 0;
   const primogems = basePrimos + firstClearBonus;
   const adventureXp = domain.rewards.adventureXp || 100;
+  const levelBooks = randInt(domain.rewards.levelBooks?.[0] || 0, domain.rewards.levelBooks?.[1] || 0, rng);
+  const talentBooks = randInt(domain.rewards.talentBooks?.[0] || 0, domain.rewards.talentBooks?.[1] || 0, rng);
 
   player.mora += mora;
   player.primogems += primogems;
-  player.artifacts[artifact.id] = artifact;
   player.adventureXp += adventureXp;
+  player.books.level += levelBooks;
+  player.books.talent += talentBooks;
 
   progress.clears += 1;
   if (options.quick) progress.quickClears += 1;
   if (Number.isFinite(options.turns)) progress.fastestTurns = progress.fastestTurns == null ? options.turns : Math.min(progress.fastestTurns, options.turns);
   progress.lastClearAt = Date.now();
 
-  return { mora, primogems, basePrimos, firstClearBonus, adventureXp, artifact, set: artifactSets[setId], clears: progress.clears };
+  const artifactSummary = artifacts.map((a) => ({ id:a.id, slot:a.slot, rarity:a.rarity, set:artifactSets[a.setId], setId:a.setId }));
+
+  return {
+    mora, primogems, basePrimos, firstClearBonus, adventureXp,
+    artifacts, artifactSummary, levelBooks, talentBooks,
+    summaryText: [`+${mora.toLocaleString()} MORA`, ...artifactSummary.slice(0,3).map((a)=>`+1X ${artifactSets[a.setId]?.name || a.setId} ${a.slot}`), `+${levelBooks}X LEVEL BOOK`, talentBooks ? `+${talentBooks}X TALENT BOOK` : ''].filter(Boolean),
+    clears: progress.clears,
+  };
 }
 
 export function levelCharacter(player, charId, amount = 1) {
+  ensureResources(player);
   const owned = player.characters[charId];
   if (!owned) return { ok:false, reason:'NOT_OWNED' };
   const requested = Math.max(1, Math.min(10, Number(amount) || 1));
   if (owned.level >= 90) return { ok:false, reason:'MAX_LEVEL' };
   let levels = 0;
   let totalCost = 0;
+  let totalBooks = 0;
   for (let i = 0; i < requested && owned.level + levels < 90; i += 1) {
     totalCost += characterLevelCost(owned.level + levels);
+    totalBooks += characterLevelBookCost(owned.level + levels);
     levels += 1;
   }
   if (player.mora < totalCost) return { ok:false, reason:'NO_MORA', cost:totalCost };
+  if ((player.books.level || 0) < totalBooks) return { ok:false, reason:'NO_LEVEL_BOOKS', books:totalBooks };
   player.mora -= totalCost;
+  player.books.level -= totalBooks;
   owned.level += levels;
   player.adventureXp += 12 * levels;
-  return { ok:true, cost:totalCost, level:owned.level, levels };
+  return { ok:true, cost:totalCost, booksUsed:totalBooks, level:owned.level, levels };
 }
 
 export function upgradeTalent(player, charId, talent) {
+  ensureResources(player);
   const owned = player.characters[charId];
   if (!owned) return { ok:false, reason:'NOT_OWNED' };
   if (!['normal','skill','burst'].includes(talent)) return { ok:false, reason:'INVALID_TALENT' };
@@ -66,22 +103,26 @@ export function upgradeTalent(player, charId, talent) {
   const current = owned.talents[talent] || 1;
   if (current >= 10) return { ok:false, reason:'TALENT_MAX' };
   const cost = talentUpgradeCost(current);
+  const books = talentBookCost(current);
   if (player.mora < cost) return { ok:false, reason:'NO_MORA', cost };
+  if ((player.books.talent || 0) < books) return { ok:false, reason:'NO_TALENT_BOOKS', books };
   player.mora -= cost;
+  player.books.talent -= books;
   owned.talents[talent] = current + 1;
   player.adventureXp += 24;
-  return { ok:true, cost, level:owned.talents[talent] };
+  return { ok:true, cost, booksUsed:books, level:owned.talents[talent] };
 }
 
 export function setShowcase(player, ids) {
   const owned = new Set(Object.keys(player.characters || {}));
-  const unique = [...new Set(ids || [])].filter((id) => owned.has(id)).slice(0, 10);
+  const unique = [...new Set(ids || [])].filter((id) => owned.has(id)).slice(0, 8);
   if (!unique.length) return { ok:false, reason:'EMPTY_SHOWCASE' };
   player.showcase = unique;
   return { ok:true, showcase:unique };
 }
 
 export function claimDaily(player, now = Date.now()) {
+  ensureResources(player);
   player.daily ||= { lastClaimAt: 0, streak: 0 };
   if (player.daily.lastClaimAt && now - player.daily.lastClaimAt < DAY) {
     return { ok:false, reason:'DAILY_ALREADY_CLAIMED', nextAt:player.daily.lastClaimAt + DAY };
@@ -91,12 +132,16 @@ export function claimDaily(player, now = Date.now()) {
   player.daily.lastClaimAt = now;
   const primogems = 160 + player.daily.streak * 20;
   const mora = 12000 + player.daily.streak * 2000;
-  const resin = 20;
+  const resin = 25;
+  const levelBooks = 2 + Math.floor(player.daily.streak / 3);
+  const talentBooks = player.daily.streak >= 5 ? 1 : 0;
   player.primogems += primogems;
   player.mora += mora;
-  player.resin = Math.min(160, player.resin + resin);
+  player.books.level += levelBooks;
+  player.books.talent += talentBooks;
+  player.resin = Math.min(player.resinMax || 180, player.resin + resin);
   player.adventureXp += 80;
-  return { ok:true, primogems, mora, resin, streak:player.daily.streak };
+  return { ok:true, primogems, mora, resin, levelBooks, talentBooks, streak:player.daily.streak };
 }
 
 export function upgradePassive(player, stat) {
