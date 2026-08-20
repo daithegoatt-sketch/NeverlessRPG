@@ -1,21 +1,22 @@
 # NeverlessRPG
 
-NeverlessRPG is a Discord-native Genshin-inspired RPG/gacha prototype for the Neverless server. The current build is the **V2 refresh** of the original prototype and is locked to the private test channel by default.
+NeverlessRPG is a Discord-native mini RPG/gacha built for the Neverless server. The current build is **V4.1** and is locked to the private test channel by default.
 
-## V2 changes
+## V4.1
 
-- `-neverless` now opens or refreshes one persistent **profile panel** instead of creating a new profile every time.
-- Opening Wish, Domains, CPU Arena, Characters, Inventory, Artifacts or Upgrades from the persistent profile creates a separate active panel, so the profile remains in the channel.
-- New generated PNG theme with a layered dark fantasy background, purple/gold Neverless borders, clearer hierarchy, readable labels and rarity frames.
-- Bundled Noto Sans runtime font through `@fontsource/noto-sans` to avoid missing-glyph square boxes in generated images.
-- Faster image rendering through raw-asset caching, resized-image caching, Promise de-duplication, concurrent remote image loading and lower PNG compression overhead.
-- Profile shows Discord avatar, account level/XP, account PWR, Resin, MMR, official-style Primogem/Mora icons and a configurable character showcase.
-- Character showcase can be selected from the Characters screen and survives restarts.
-- Character development supports multi-level upgrades and talent levels for Normal / Skill / Burst. Talent levels increase combat multipliers and character PWR.
-- Wish UI shows current Primogem balance, 5★/4★ pity, pull costs, visual ten-pull results, names, rarity marks and duplicate state.
-- Domains now include recommended PWR, user PWR, team setup, enemy lineup, artifact sets, first-clear Primogem bonuses, clear tracking, fastest-turn tracking and Quick Clear after the first normal clear when PWR is high enough.
-- Domain progress, selected profile showcase and UI profile message ID are migrated into existing player saves without resetting accounts.
-- Battle cards keep character/enemy names, HP/Energy/SPD, current turn emphasis and talent levels on battle buttons.
+- `-neverless` owns one persistent panel per Discord user. Re-running the command refreshes that same panel and old bot panels are cleaned up.
+- Profile, Wish, Domains, Characters, Inventory, Artifacts, Upgrades and battles all update the same active message.
+- The PNG renderer no longer depends on runtime fonts for important labels. Names, HP values, XP, PWR and resource counts use a built-in vector pixel alphabet so Railway font availability cannot turn them into square glyphs.
+- Profile has a programmed dark-fantasy background with stars, moon glow, mountain silhouettes, ruins and purple/gold Neverless framing.
+- Profile displays Discord avatar, username, account level, XP bar, account PWR, character count, Resin, MMR, Primogems, Mora and configurable character showcase slots.
+- Character cards display Level, role and PWR. Levels, talents, weapon stats and artifacts affect actual combat power.
+- Combat roles matter: DPS characters deal bonus damage, Supports heal/buff more and generate team Energy, Tanks take less damage and can draw enemy attacks.
+- Balanced DPS + Support + Tank teams gain a starting synergy bonus. Double-DPS and double-Support teams have their own smaller bonuses.
+- Domain bonus elements deal extra damage and same-element attacks can be resisted.
+- The new starter Domain, **Windrise Training Ground**, costs only 10 Resin and is tuned for a fast starter clear. Automated tests verify a Lv.20 starter roster can clear it quickly and that leveling characters improves clear time.
+- Domain progress stores clear count and fastest turn record. Higher PWR can unlock Quick Clear after the first normal clear.
+- Wish keeps Primogem balance, 4★/5★ pity, visual pull results, duplicates, Constellations and weapon Refinement.
+- Daily rewards, saved roster, weapons, artifacts, pity, Domain history, MMR, showcase and UI panel ID are persisted in the player save file.
 
 ## Start
 
@@ -28,9 +29,11 @@ Environment variables:
 
 - `DISCORD_TOKEN`
 - `GAME_CHANNEL_ID=1539226931319545936`
-- `DATA_FILE=/app/runtime/players.json` for Railway persistent storage
+- `DATA_FILE=/data/players.json` recommended when using a Railway persistent volume
 
-Enable **Message Content Intent** because the current entry command is `-neverless`.
+Enable **Message Content Intent** because the entry command is `-neverless`.
+
+For a production deployment, mount a Railway persistent volume and point `DATA_FILE` to that mounted path so player accounts survive service redeploys.
 
 ## Tests
 
@@ -39,4 +42,4 @@ npm test
 npm run check
 ```
 
-The V2 test suite covers wishing, CPU battle initialization, multi-level character development, talent upgrades, profile showcase validation and Domain clear/first-clear/Quick Clear progress.
+The test suite covers wishing, CPU battle initialization, starter-domain pacing and progression value.
