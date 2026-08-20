@@ -14,6 +14,15 @@ function scaledSkills(definition,owned){
       if(!skills[key].description) skills[key].description=`${skills[key].name} • Talent Lv.${level}`;
     }
   }
+  skills.combo={
+    name:`Double ${skills.skill?.name || 'Combo'}`,
+    type:'damage',
+    multiplier:((skills.normal?.multiplier||1)*0.9)+((skills.skill?.multiplier||1.4)*0.95),
+    cost:50,
+    energy:0,
+    talentLevel:Math.max(skills.normal?.talentLevel||1,skills.skill?.talentLevel||1),
+    description:'A stronger chained move that consumes Energy and hits harder.',
+  };
   return skills;
 }
 
@@ -25,7 +34,7 @@ function playerActor(player,charId,side='player'){
     element:built.definition.element,role:built.definition.role,skills:scaledSkills(built.definition,built.owned),
     maxHp:built.stats.hp,hp:built.stats.hp,atk:built.stats.atk,def:built.stats.def,spd:built.stats.spd,
     critRate:built.stats.critRate,critDmg:built.stats.critDmg,elementDmg:built.stats.elementDmg||0,
-    energy:0,shield:0,atkBuff:0,dmgTakenAmp:0,damageReduction:built.definition.role==='Tank'?0.18:0,
+    energy: side==='player' ? 25 : 0,shield:0,atkBuff:0,dmgTakenAmp:0,damageReduction:built.definition.role==='Tank'?0.18:0,
     cooldowns:{skill:0},tauntTurns:0,
   };
 }
@@ -35,11 +44,12 @@ function enemyActor(enemy,idx){
   return {
     uid:`enemy:${idx}:${enemy.id}`,side:'enemy',id:enemy.id,name:enemy.name,image:enemy.image,icon:enemy.image,
     element:enemy.element,role:'Enemy',maxHp:enemy.hp,hp:enemy.hp,atk:enemy.atk,def:enemy.def,spd:enemy.spd,
-    critRate:0.05,critDmg:0.45,elementDmg:0,energy:0,shield:0,atkBuff:0,dmgTakenAmp:0,damageReduction:0,cooldowns:{skill:0},tauntTurns:0,
+    critRate:0.05,critDmg:0.45,elementDmg:0,energy:10,shield:0,atkBuff:0,dmgTakenAmp:0,damageReduction:0,cooldowns:{skill:0},tauntTurns:0,
     skills:{
       normal:{name:'Attack',type:'damage',multiplier:0.90,energy:22,talentLevel:1,description:'Standard enemy attack.'},
       skill:{name:skillName,type:'damage',multiplier:1.25,energy:30,cooldown:1,talentLevel:1,description:'Stronger enemy attack.'},
       burst:{name:'Rage',type:'damage',multiplier:1.80,cost:80,talentLevel:1,description:'Enemy finisher.'},
+      combo:{name:'Savage Chain',type:'damage',multiplier:1.75,cost:50,talentLevel:1,description:'Chained enemy strike.'},
     },
   };
 }
@@ -50,11 +60,11 @@ function applyTeamSynergy(team){
   const supportCount=team.filter(a=>a.role==='Support').length;
   const dpsCount=team.filter(a=>a.role==='DPS').length;
   const tankCount=team.filter(a=>a.role==='Tank').length;
-  if(balanced){for(const a of team){a.atkBuff+=0.08;a.energy=15;}}
+  if(balanced){for(const a of team){a.atkBuff+=0.08;a.energy=25;}}
   if(supportCount>=2){for(const a of team)a.energy=Math.min(100,a.energy+8);}
   if(dpsCount>=2){for(const a of team)if(a.role==='DPS')a.critRate=Math.min(.85,a.critRate+.05);}
   if(tankCount>=1){for(const a of team)if(a.role!=='Tank')a.damageReduction=Math.max(a.damageReduction,.06);}
-  return balanced?'BALANCED TEAM +8% ATK +15 ENERGY':supportCount>=2?'DOUBLE SUPPORT + ENERGY':dpsCount>=2?'DOUBLE DPS +5% CRIT':tankCount>=1?'TANK AURA +6% DAMAGE REDUCTION':'NO TEAM SYNERGY';
+  return balanced?'Balanced team bonus active':supportCount>=2?'Double support bonus active':dpsCount>=2?'Double DPS crit bonus active':tankCount>=1?'Tank aura active':'No team synergy';
 }
 
 export function createDomainBattle(player,teamIds,domain){
@@ -69,7 +79,7 @@ export function createCpuBattle(player,teamIds,cpuPlayer){
   return createBattle({mode:'cpu',playerTeam,enemyTeam,meta:{opponentName:'Neverless Automaton',synergyLabel:applyTeamSynergy(playerTeam)}});
 }
 export function createBattle({mode,playerTeam,enemyTeam,meta={}}){
-  const b={id:`b_${Date.now()}_${Math.floor(Math.random()*1e7)}`,mode,turn:0,tick:0,actors:[...playerTeam,...enemyTeam],log:[meta.synergyLabel||'Battle started.'],winner:null,meta,pendingActorUid:null};
+  const b={id:`b_${Date.now()}_${Math.floor(Math.random()*1e7)}`,mode,turn:0,tick:0,actors:[...playerTeam,...enemyTeam],log:[meta.synergyLabel||'Battle started.'],winner:null,meta,pendingActorUid:null,lastEvent:null,rewards:null};
   advanceToNextActor(b);return b;
 }
 
@@ -103,15 +113,16 @@ export function act(battle,actorUid,action,targetUid,rng=Math.random){
   const skill=actor.skills[action];if(!skill)return{ok:false,reason:'INVALID_ACTION'};
   if(action==='skill'&&actor.cooldowns.skill>0)return{ok:false,reason:'COOLDOWN'};
   if(action==='burst'&&actor.energy<(skill.cost||80))return{ok:false,reason:'NO_ENERGY'};
+  if(action==='combo'&&actor.energy<(skill.cost||50))return{ok:false,reason:'NO_ENERGY'};
 
   let target=battle.actors.find(a=>a.uid===targetUid&&alive(a));const friends=alliesOf(battle,actor),foes=enemiesOf(battle,actor);
   const isSupport=['heal','teamHeal','teamBuffHeal','shield','teamBuff'].includes(skill.type);if(!target)target=isSupport?actor:foes[0];
-  const event={actorUid:actor.uid,actorName:actor.name,actorSide:actor.side,actorElement:actor.element,actorRole:actor.role,action,skillName:skill.name,skillDescription:skill.description||'',talentLevel:skill.talentLevel||1,targetUid:target?.uid||null,targetName:target?.name||null,damage:0,healed:0,shield:0,crit:false,buff:false,debuff:false,roleBonus:actor.role};
+  const event={actorUid:actor.uid,actorName:actor.name,actorSide:actor.side,actorElement:actor.element,actorRole:actor.role,action,skillName:skill.name,skillDescription:skill.description||'',talentLevel:skill.talentLevel||1,targetUid:target?.uid||null,targetName:target?.name||null,damage:0,healed:0,shield:0,crit:false,buff:false,debuff:false,roleBonus:actor.role,combo:action==='combo'};
   let line='';
 
   if(['damage','damageShield','damageDebuff','damageTeamBuff','selfBuffDamage','damageHeal'].includes(skill.type)){
     if(!target||target.side===actor.side)target=foes[0];if(!target)return{ok:false,reason:'NO_TARGET'};event.targetUid=target.uid;event.targetName=target.name;
-    const roll=damageRoll(battle,actor,target,skill.multiplier,rng),applied=applyDamage(target,roll.damage);event.damage=applied.damage;event.absorbed=applied.absorbed;event.crit=roll.crit;
+    const roll=damageRoll(battle,actor,target,skill.multiplier*(action==='combo'?1.15:1),rng),applied=applyDamage(target,roll.damage);event.damage=applied.damage;event.absorbed=applied.absorbed;event.crit=roll.crit;
     line=`${actor.name} used ${skill.name} on ${target.name}: ${applied.damage} DMG${roll.crit?' CRIT':''}.`;
     if(skill.type==='damageShield'){event.shield=Math.round(actor.maxHp*.18*supportPower(actor));actor.shield+=event.shield;actor.tauntTurns=actor.role==='Tank'?2:0;}
     if(skill.type==='damageDebuff'){target.dmgTakenAmp=clamp(target.dmgTakenAmp+.12,0,.40);event.debuff=true;}
@@ -131,8 +142,11 @@ export function act(battle,actorUid,action,targetUid,rng=Math.random){
   }
 
   if(actor.role==='Support'&&action!=='normal'){for(const a of friends)if(a.uid!==actor.uid)a.energy=Math.min(100,a.energy+5);}
-  if(action==='burst')actor.energy=0;else actor.energy=Math.min(100,actor.energy+(skill.energy||0));
+  if(action==='burst')actor.energy=0;
+  else if(action==='combo')actor.energy=Math.max(0,actor.energy-(skill.cost||50));
+  else actor.energy=Math.min(100,actor.energy+(skill.energy||0));
   if(action==='skill')actor.cooldowns.skill=skill.cooldown||1;
+  battle.lastEvent=event;
   battle.log.unshift(line);battle.log=battle.log.slice(0,5);battle.turn+=1;checkWinner(battle);if(!battle.winner)advanceToNextActor(battle);
   return{ok:true,line,event,battle};
 }
@@ -143,7 +157,10 @@ export function currentActor(b){return b.actors.find(a=>a.uid===b.pendingActorUi
 export function validTargets(b,action){const actor=currentActor(b);if(!actor)return[];const skill=actor.skills[action];if(['heal','shield'].includes(skill?.type))return b.actors.filter(a=>a.side===actor.side&&alive(a));if(['teamHeal','teamBuffHeal','teamBuff'].includes(skill?.type))return[actor];return b.actors.filter(a=>a.side!==actor.side&&alive(a));}
 export function chooseCpuAction(b,rng=Math.random){
   const actor=currentActor(b);if(!actor||actor.side!=='enemy')return null;const friends=alliesOf(b,actor),foes=enemiesOf(b,actor),low=friends.find(a=>a.hp/a.maxHp<.40);let action='normal';
-  if(actor.energy>=(actor.skills.burst.cost||80))action='burst';else if(actor.cooldowns.skill===0)action='skill';if(low&&['heal','teamHeal','teamBuffHeal','shield'].includes(actor.skills.skill.type))action='skill';
+  if(actor.energy>=(actor.skills.burst.cost||80))action='burst';
+  else if(actor.energy>=(actor.skills.combo.cost||50)&&rng()<0.35)action='combo';
+  else if(actor.cooldowns.skill===0)action='skill';
+  if(low&&['heal','teamHeal','teamBuffHeal','shield'].includes(actor.skills.skill.type))action='skill';
   const targets=validTargets(b,action);const taunter=foes.find(a=>a.tauntTurns>0&&a.role==='Tank');const target=taunter||[...targets].sort((a,c)=>a.hp/a.maxHp-c.hp/c.maxHp)[0]||foes[Math.floor(rng()*foes.length)]||actor;return{actorUid:actor.uid,action,targetUid:target.uid};
 }
 export function runCpuUntilPlayerTurn(b,rng=Math.random,max=20){const events=[];let guard=0;while(!b.winner&&currentActor(b)?.side==='enemy'&&guard<max){const move=chooseCpuAction(b,rng);if(!move)break;events.push(act(b,move.actorUid,move.action,move.targetUid,rng));guard+=1;}return events;}
