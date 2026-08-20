@@ -1,22 +1,28 @@
-# NeverlessRPG
+# Neverless Adventure
 
-NeverlessRPG is a Discord-native mini RPG/gacha built for the Neverless server. The current build is **V4.1** and is locked to the private test channel by default.
+Neverless Adventure is the Discord-native RPG/gacha project for the Neverless server. The current build is **V6** and still uses `-neverless` as the entry command in the private test channel.
 
-## V4.1
+## V6
 
-- `-neverless` owns one persistent panel per Discord user. Re-running the command refreshes that same panel and old bot panels are cleaned up.
-- Profile, Wish, Domains, Characters, Inventory, Artifacts, Upgrades and battles all update the same active message.
-- The PNG renderer no longer depends on runtime fonts for important labels. Names, HP values, XP, PWR and resource counts use a built-in vector pixel alphabet so Railway font availability cannot turn them into square glyphs.
-- Profile has a programmed dark-fantasy background with stars, moon glow, mountain silhouettes, ruins and purple/gold Neverless framing.
-- Profile displays Discord avatar, username, account level, XP bar, account PWR, character count, Resin, MMR, Primogems, Mora and configurable character showcase slots.
-- Character cards display Level, role and PWR. Levels, talents, weapon stats and artifacts affect actual combat power.
-- Combat roles matter: DPS characters deal bonus damage, Supports heal/buff more and generate team Energy, Tanks take less damage and can draw enemy attacks.
-- Balanced DPS + Support + Tank teams gain a starting synergy bonus. Double-DPS and double-Support teams have their own smaller bonuses.
-- Domain bonus elements deal extra damage and same-element attacks can be resisted.
-- The new starter Domain, **Windrise Training Ground**, costs only 10 Resin and is tuned for a fast starter clear. Automated tests verify a Lv.20 starter roster can clear it quickly and that leveling characters improves clear time.
-- Domain progress stores clear count and fastest turn record. Higher PWR can unlock Quick Clear after the first normal clear.
-- Wish keeps Primogem balance, 4★/5★ pity, visual pull results, duplicates, Constellations and weapon Refinement.
-- Daily rewards, saved roster, weapons, artifacts, pity, Domain history, MMR, showcase and UI panel ID are persisted in the player save file.
+- One persistent Discord panel per user. Re-running `-neverless` refreshes the same active message.
+- Main identity changed from **Neverless RPG** to **Neverless Adventure**.
+- Profile UI was rebuilt with a cleaner layout and a more alive fantasy background: sky, moon, mountains, fog and village silhouettes.
+- Profile shows Discord avatar, username, account level, XP bar, PWR, Resin, Primogems, Mora and a configurable showcase of up to 8 owned characters.
+- Resin now has a 180 cap and regenerates automatically at 1 Resin every 8 minutes.
+- Domain UI was rebuilt with cleaner spacing, visible enemy tiles/fallbacks, reward previews and domain-specific purposes.
+- Starter Windrise Training Ground remains fast and forgiving. Later Domains scale into artifact, talent-book and mixed farming routes.
+- Domain rewards can now drop multiple artifacts, Level Books and Talent Books in addition to Mora and Primogems.
+- Character leveling now consumes both Mora and Level Books.
+- Talent upgrading now consumes both Mora and Talent Books.
+- Inventory UI shows Primogems, Mora, Resin, Level Books, Talent Books, weapons and collection totals.
+- Character detail UI shows the PNG portrait, 5 artifact slots, equipped weapon, stats, PWR, role value and skill names.
+- Showcase characters can be selected from the owned roster.
+- Combat buttons use the actual skill names instead of generic Normal/Skill/Burst labels.
+- Added an Energy-based **Double Skill / Combo** action for more active combat decisions.
+- Battle cards show HP, Energy, hit target emphasis, damage text and centered victory rewards.
+- Victory reward panel summarizes Mora, artifact count, Level Books and Talent Books.
+- DPS, Support and Tank roles continue to affect real battle calculations.
+- Wish, Domains, Characters, Inventory, Artifacts, Upgrades and battles all continue to update the same persistent panel.
 
 ## Start
 
@@ -25,21 +31,10 @@ npm install
 npm start
 ```
 
-Environment variables:
+Required environment variable:
 
-- `DISCORD_TOKEN`
-- `GAME_CHANNEL_ID=1539226931319545936`
-- `DATA_FILE=/data/players.json` recommended when using a Railway persistent volume
-
-Enable **Message Content Intent** because the entry command is `-neverless`.
-
-For a production deployment, mount a Railway persistent volume and point `DATA_FILE` to that mounted path so player accounts survive service redeploys.
-
-## Tests
-
-```bash
-npm test
-npm run check
+```env
+DISCORD_TOKEN=your_bot_token
 ```
 
-The test suite covers wishing, CPU battle initialization, starter-domain pacing and progression value.
+The test-channel lock and command prefix remain configured in `src/config/constants.js`.
