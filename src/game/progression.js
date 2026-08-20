@@ -1,6 +1,8 @@
 import { artifactSets, generateArtifact } from '../data/artifacts.js';
 import { domains } from '../data/domains.js';
 
+const DAY = 86_400_000;
+
 export function characterLevelCost(level) {
   return 2500 + Math.max(1, level) * 450;
 }
@@ -21,7 +23,7 @@ export function grantDomainRewards(player, domainId, rng = Math.random, options 
   const rarity = domain.level >= 3 ? 5 : (rng() < 0.72 ? 5 : 4);
   const artifact = generateArtifact(setId,rarity,rng);
   const basePrimos = domain.rewards.primogems;
-  const firstClearBonus = firstClear ? (domain.firstClearPrimogems || 0) : 0;
+  const firstClearBonus = firstClear ? (domain.firstClearPrimogems || 40) : 0;
   const primogems = basePrimos + firstClearBonus;
   const adventureXp = domain.rewards.adventureXp || 100;
 
@@ -32,21 +34,10 @@ export function grantDomainRewards(player, domainId, rng = Math.random, options 
 
   progress.clears += 1;
   if (options.quick) progress.quickClears += 1;
-  if (Number.isFinite(options.turns)) {
-    progress.fastestTurns = progress.fastestTurns == null ? options.turns : Math.min(progress.fastestTurns, options.turns);
-  }
+  if (Number.isFinite(options.turns)) progress.fastestTurns = progress.fastestTurns == null ? options.turns : Math.min(progress.fastestTurns, options.turns);
   progress.lastClearAt = Date.now();
 
-  return {
-    mora,
-    primogems,
-    basePrimos,
-    firstClearBonus,
-    adventureXp,
-    artifact,
-    set: artifactSets[setId],
-    clears: progress.clears,
-  };
+  return { mora, primogems, basePrimos, firstClearBonus, adventureXp, artifact, set: artifactSets[setId], clears: progress.clears };
 }
 
 export function levelCharacter(player, charId, amount = 1) {
@@ -54,7 +45,6 @@ export function levelCharacter(player, charId, amount = 1) {
   if (!owned) return { ok:false, reason:'NOT_OWNED' };
   const requested = Math.max(1, Math.min(10, Number(amount) || 1));
   if (owned.level >= 90) return { ok:false, reason:'MAX_LEVEL' };
-
   let levels = 0;
   let totalCost = 0;
   for (let i = 0; i < requested && owned.level + levels < 90; i += 1) {
@@ -62,7 +52,6 @@ export function levelCharacter(player, charId, amount = 1) {
     levels += 1;
   }
   if (player.mora < totalCost) return { ok:false, reason:'NO_MORA', cost:totalCost };
-
   player.mora -= totalCost;
   owned.level += levels;
   player.adventureXp += 12 * levels;
@@ -90,6 +79,24 @@ export function setShowcase(player, ids) {
   if (!unique.length) return { ok:false, reason:'EMPTY_SHOWCASE' };
   player.showcase = unique;
   return { ok:true, showcase:unique };
+}
+
+export function claimDaily(player, now = Date.now()) {
+  player.daily ||= { lastClaimAt: 0, streak: 0 };
+  if (player.daily.lastClaimAt && now - player.daily.lastClaimAt < DAY) {
+    return { ok:false, reason:'DAILY_ALREADY_CLAIMED', nextAt:player.daily.lastClaimAt + DAY };
+  }
+  const continued = player.daily.lastClaimAt && now - player.daily.lastClaimAt < DAY * 2;
+  player.daily.streak = continued ? Math.min(7, (player.daily.streak || 0) + 1) : 1;
+  player.daily.lastClaimAt = now;
+  const primogems = 160 + player.daily.streak * 20;
+  const mora = 12000 + player.daily.streak * 2000;
+  const resin = 20;
+  player.primogems += primogems;
+  player.mora += mora;
+  player.resin = Math.min(160, player.resin + resin);
+  player.adventureXp += 80;
+  return { ok:true, primogems, mora, resin, streak:player.daily.streak };
 }
 
 export function upgradePassive(player, stat) {
