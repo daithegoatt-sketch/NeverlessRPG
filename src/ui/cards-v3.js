@@ -1,7 +1,7 @@
 import sharp from 'sharp';
 import { characters } from '../data/characters.js';
 import { weapons } from '../data/weapons.js';
-import { artifactSets } from '../data/artifacts.js';
+import { artifactSets, artifactSlots } from '../data/artifacts.js';
 import { domains } from '../data/domains.js';
 import { buildCharacterStats, calculatePlayerPower, characterPower, playerLevelInfo } from '../game/stats.js';
 import { currentActor } from '../game/battle.js';
@@ -9,9 +9,7 @@ import { currentActor } from '../game/battle.js';
 sharp.cache({ memory: 128, items: 300, files: 0 });
 sharp.concurrency(4);
 
-const C={bg:'#070a12',panel:'#101725',panel2:'#172033',line:'#31405f',purple:'#866be8',gold:'#e1bd62',text:'#f7f5ff',muted:'#9ba8c3',green:'#50d29b',red:'#ef6a78',blue:'#63a9ed',cyan:'#67d5d1'};
-const PRIMO='https://enka.network/ui/UI_ItemIcon_201.png';
-const MORA='https://enka.network/ui/UI_ItemIcon_202.png';
+const C={bg:'#070a12',panel:'#101725',panel2:'#172033',line:'#31405f',purple:'#866be8',gold:'#e1bd62',text:'#f7f5ff',muted:'#9ba8c3',green:'#50d29b',red:'#ef6a78',blue:'#63a9ed',cyan:'#67d5d1',pink:'#ef75ac'};
 const rawCache=new Map(), imgCache=new Map();
 
 const GLYPHS={
@@ -19,49 +17,246 @@ const GLYPHS={
 '0':[14,17,19,21,25,17,14],'1':[4,12,4,4,4,4,14],'2':[14,17,1,2,4,8,31],'3':[30,1,1,14,1,1,30],'4':[2,6,10,18,31,2,2],'5':[31,16,16,30,1,1,30],'6':[14,16,16,30,17,17,14],'7':[31,1,2,4,8,8,8],'8':[14,17,17,14,17,17,14],'9':[14,17,17,15,1,1,14],
 '-':[0,0,0,31,0,0,0],'.':[0,0,0,0,0,12,12],':':[0,12,12,0,12,12,0],'/':[1,2,2,4,8,8,16],'+':[0,4,4,31,4,4,0],'%':[17,2,4,8,16,17,0],"'":[4,4,2,0,0,0,0],'!':[4,4,4,4,4,0,4],'?':[14,17,1,2,4,0,4],'(':[2,4,8,8,8,4,2],')':[8,4,2,2,2,4,8],',':[0,0,0,0,0,4,8],'=':[0,31,0,31,0,0,0]
 };
-function safe(s=''){return String(s).normalize('NFKD').replace(/[^A-Za-z0-9 .:/+%!?(),='-]/g,'').toUpperCase();}
+const safe=(s='')=>String(s).normalize('NFKD').replace(/[^A-Za-z0-9 .:/+%!?(),='-]/g,'').toUpperCase();
+const cut=(s,n)=>{s=safe(s); return s.length>n?`${s.slice(0,n-1)}…`:s;};
 function ptext(x,y,value,scale=4,color=C.text,spacing=1,anchor='start'){
  const s=safe(value); const cell=5*scale+spacing*scale; const width=Math.max(0,s.length*cell-spacing*scale); let ox=anchor==='middle'?x-width/2:anchor==='end'?x-width:x; let out='';
  for(const ch of s){const g=GLYPHS[ch]||GLYPHS['?']; for(let r=0;r<7;r++){for(let c=0;c<5;c++){if(g[r]&(1<<(4-c)))out+=`<rect x="${ox+c*scale}" y="${y+r*scale}" width="${scale}" height="${scale}" rx="${Math.max(0,scale*.12)}" fill="${color}"/>`;}} ox+=cell;} return out;
 }
-function rect(x,y,w,h,r,fill,stroke='none',sw=1,op=1){return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${r}" fill="${fill}" fill-opacity="${op}" stroke="${stroke}" stroke-width="${sw}"/>`;}
-function bar(x,y,w,h,ratio,color){return rect(x,y,w,h,h/2,'#253149')+rect(x,y,w*Math.max(0,Math.min(1,ratio)),h,h/2,color);}
-function rarity(r){return r>=5?C.gold:r===4?C.purple:C.blue;}
-function bg(w,h,accent=C.purple){return `<defs><linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#080b18"/><stop offset=".55" stop-color="#12152a"/><stop offset="1" stop-color="#090b12"/></linearGradient><radialGradient id="glow"><stop offset="0" stop-color="${accent}" stop-opacity=".28"/><stop offset="1" stop-color="${accent}" stop-opacity="0"/></radialGradient></defs><rect width="${w}" height="${h}" fill="url(#sky)"/><circle cx="${w*.82}" cy="${h*.16}" r="340" fill="url(#glow)"/><circle cx="${w*.16}" cy="${h*.17}" r="82" fill="#e4d39a" opacity=".08"/><circle cx="${w*.18}" cy="${h*.15}" r="82" fill="#080b18"/><g fill="#c9d5ff" opacity=".35">${[[90,105],[190,72],[315,120],[512,86],[720,112],[965,70],[1165,128],[1288,86],[1080,186],[430,190]].map(([a,b])=>`<circle cx="${a}" cy="${b}" r="2"/>`).join('')}</g><path d="M0 ${h*.68} L150 ${h*.48} L270 ${h*.64} L430 ${h*.42} L610 ${h*.66} L815 ${h*.46} L970 ${h*.63} L1160 ${h*.43} L1400 ${h*.68} V${h}H0Z" fill="#0a0e18" opacity=".95"/><path d="M0 ${h*.76} Q220 ${h*.62} 420 ${h*.77} T820 ${h*.72} T1400 ${h*.78} V${h}H0Z" fill="#0d1320"/><g stroke="#8270c9" stroke-opacity=".14" fill="none"><path d="M70 ${h*.70} V${h*.40} Q120 ${h*.30} 170 ${h*.40} V${h*.70}" stroke-width="7"/><path d="M1230 ${h*.69} V${h*.34} Q1280 ${h*.25} 1330 ${h*.34} V${h*.69}" stroke-width="7"/></g>${rect(28,28,w-56,h-56,28,'#0b1020',accent,2,.64)}${rect(42,42,w-84,h-84,22,'none',C.gold,1,.25)}`;}
+const rect=(x,y,w,h,r,fill,stroke='none',sw=1,op=1)=>`<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${r}" fill="${fill}" fill-opacity="${op}" stroke="${stroke}" stroke-width="${sw}"/>`;
+const line=(x1,y1,x2,y2,color,sw=1,op=1)=>`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${color}" stroke-width="${sw}" opacity="${op}"/>`;
+const rarity=(r)=>r>=5?C.gold:r===4?C.purple:C.blue;
+const fmt=(n)=>Number(n||0).toLocaleString('en-US');
+const bar=(x,y,w,h,ratio,color)=>rect(x,y,w,h,h/2,'#253149')+rect(x,y,w*Math.max(0,Math.min(1,ratio)),h,h/2,color);
+const panel=(x,y,w,h,accent=C.line)=>rect(x,y,w,h,18,C.panel,accent,2,.95);
+const statLine=(x,y,label,value,c=C.text)=>ptext(x,y,label,2,C.muted)+ptext(x+160,y,value,2,c);
+
+function bg(w,h,accent=C.purple){
+  const houses=[
+    [160,h*0.73,66,58],[250,h*0.74,52,44],[340,h*0.72,74,62],[470,h*0.75,58,46],
+    [980,h*0.73,66,56],[1080,h*0.74,54,42],[1180,h*0.71,72,60],[1285,h*0.75,58,46],
+  ];
+  const roofs=houses.map(([x,y,bw,bh])=>`<path d="M${x} ${y} L${x+bw/2} ${y-bh*.55} L${x+bw} ${y}" fill="#44345c" stroke="#8f79d3" stroke-opacity=".25"/>`).join('');
+  const bodies=houses.map(([x,y,bw,bh])=>`${rect(x,y,bw,bh,6,'#131a2a','#2f4164',1,.9)}${rect(x+bw*.22,y+bh*.3,10,12,2,'#ffd78d','none',1,.85)}${rect(x+bw*.55,y+bh*.3,10,12,2,'#ffd78d','none',1,.85)}`).join('');
+  return `
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#09101f"/><stop offset=".45" stop-color="#11182e"/><stop offset="1" stop-color="#090c14"/></linearGradient>
+    <radialGradient id="glow"><stop offset="0" stop-color="${accent}" stop-opacity=".28"/><stop offset="1" stop-color="${accent}" stop-opacity="0"/></radialGradient>
+    <linearGradient id="fog" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6cc2ff" stop-opacity=".08"/><stop offset="1" stop-color="#6cc2ff" stop-opacity="0"/></linearGradient>
+  </defs>
+  <rect width="${w}" height="${h}" fill="url(#sky)"/>
+  <circle cx="${w*.82}" cy="${h*.16}" r="340" fill="url(#glow)"/>
+  <circle cx="${w*.18}" cy="${h*.16}" r="68" fill="#f2dfb2" opacity=".14"/>
+  <circle cx="${w*.20}" cy="${h*.145}" r="68" fill="#09101f"/>
+  <g fill="#d8e1ff" opacity=".45">${[[90,105],[190,72],[315,120],[512,86],[720,112],[965,70],[1165,128],[1288,86],[1080,186],[430,190],[840,164]].map(([a,b])=>`<circle cx="${a}" cy="${b}" r="2"/>`).join('')}</g>
+  <path d="M0 ${h*.60} L135 ${h*.45} L280 ${h*.60} L470 ${h*.38} L690 ${h*.63} L860 ${h*.44} L1045 ${h*.60} L1210 ${h*.40} L1400 ${h*.62} V${h}H0Z" fill="#0b1020" opacity=".95"/>
+  <path d="M0 ${h*.70} Q210 ${h*.58} 400 ${h*.72} T810 ${h*.67} T1400 ${h*.73} V${h}H0Z" fill="#0d1320"/>
+  <path d="M0 ${h*.76} Q260 ${h*.73} 510 ${h*.78} T1000 ${h*.77} T1400 ${h*.79} V${h}H0Z" fill="url(#fog)"/>
+  ${roofs}${bodies}
+  ${rect(28,28,w-56,h-56,28,'#0b1020',accent,2,.64)}${rect(42,42,w-84,h-84,22,'none',C.gold,1,.25)}`;
+}
 function svg(w,h,body){return Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${body}</svg>`);}
 async function raw(url){if(!url)return null;if(rawCache.has(url))return rawCache.get(url);const p=(async()=>{try{const r=await fetch(url,{signal:AbortSignal.timeout(2200)});if(!r.ok)return null;return Buffer.from(await r.arrayBuffer());}catch{return null;}})();rawCache.set(url,p);return p;}
 async function remote(url,w,h,fit='contain',round=0){if(!url)return null;const k=`${url}|${w}|${h}|${fit}|${round}`;if(imgCache.has(k))return imgCache.get(k);const p=(async()=>{const s=await raw(url);if(!s)return null;try{let q=sharp(s).resize(w,h,{fit,position:'centre'}).png({compressionLevel:3});if(round){q=q.composite([{input:Buffer.from(`<svg width="${w}" height="${h}"><rect width="${w}" height="${h}" rx="${round}" fill="white"/></svg>`),blend:'dest-in'}]);}return q.toBuffer();}catch{return null;}})();imgCache.set(k,p);return p;}
-async function compose(w,h,back,imgs,front){const layers=[{input:svg(w,h,back),left:0,top:0},...imgs.filter(i=>i.input).map(i=>({input:i.input,left:i.left,top:i.top})),{input:svg(w,h,front),left:0,top:0}];return sharp({create:{width:w,height:h,channels:4,background:C.bg}}).composite(layers).png({compressionLevel:4}).toBuffer();}
-async function layer(url,w,h,left,top,fit='contain',round=0){return {input:await remote(url,w,h,fit,round),left,top};}
-function panel(x,y,w,h,accent=C.line){return rect(x,y,w,h,18,C.panel,accent,2,.94);}
-function fmt(n){return Number(n||0).toLocaleString('en-US');}
-function title(v,sub=''){return ptext(70,72,v,6,C.text)+ (sub?ptext(70,124,sub,3,C.muted):'');}
+async function compose(w,h,back,imgs,front){const layers=[{input:svg(w,h,back),left:0,top:0},...imgs.filter(i=>i?.input).map(i=>({input:i.input,left:i.left,top:i.top})),{input:svg(w,h,front),left:0,top:0}];return sharp({create:{width:w,height:h,channels:4,background:C.bg}}).composite(layers).png({compressionLevel:4}).toBuffer();}
+async function entityTile(url,x,y,w,h,label,accent=C.line){
+  const img=await remote(url,w-20,h-38,'contain',12);
+  let body=panel(x,y,w,h,accent);
+  if(!img){body+=rect(x+10,y+10,w-20,h-38,12,'#162136',accent,1,.75)+ptext(x+w/2,y+h/2-20,cut(label,10),2,C.muted,1,'middle');}
+  body+=ptext(x+w/2,y+h-30,cut(label,12),2,C.text,1,'middle');
+  return { body, image: img ? {input:img,left:x+10,top:y+10} : null };
+}
+function drawIcon(kind,x,y,s=26){
+  if(kind==='mora') return `<circle cx="${x+s/2}" cy="${y+s/2}" r="${s/2}" fill="#d6a13f" stroke="#f5d382" stroke-width="2"/><circle cx="${x+s/2}" cy="${y+s/2}" r="${s/2-6}" fill="#f5d382" opacity=".55"/>`;
+  if(kind==='primo') return `<path d="M${x+s/2} ${y} L${x+s*.72} ${y+s*.28} L${x+s} ${y+s/2} L${x+s*.72} ${y+s*.72} L${x+s/2} ${y+s} L${x+s*.28} ${y+s*.72} L${x} ${y+s/2} L${x+s*.28} ${y+s*.28}Z" fill="#8ad4ff" stroke="#dff7ff" stroke-width="2"/>`;
+  if(kind==='resin') return `<path d="M${x+s*.5} ${y+3} C${x+s*.18} ${y+s*.18}, ${x+s*.12} ${y+s*.64}, ${x+s*.5} ${y+s*.94} C${x+s*.88} ${y+s*.64}, ${x+s*.82} ${y+s*.18}, ${x+s*.5} ${y+3}Z" fill="#7de5d6" stroke="#d7fff8" stroke-width="2"/>`;
+  if(kind==='book') return `${rect(x+2,y+3,s-4,s-6,5,'#4c72e2','#c0d6ff',2,.95)}${line(x+s*.5,y+5,x+s*.5,y+s-5,'#c0d6ff',2)}${rect(x+7,y+8,s-14,4,2,'#dfe7ff','none',1,.65)}${rect(x+7,y+16,s-18,4,2,'#dfe7ff','none',1,.35)}`;
+  return rect(x,y,s,s,6,C.blue);
+}
+function metricBox(x,y,w,label,value,icon){return panel(x,y,w,56,C.line)+drawIcon(icon,x+12,y+14,28)+ptext(x+52,y+12,label,2,C.muted)+ptext(x+52,y+30,value,2,C.text);}
+function titleMain(main,sub=''){return ptext(70,70,main,6,C.text)+(sub?ptext(70,118,sub,3,C.muted):'');}
 
-export async function renderHomeCard(player,user={}){
- const W=1400,H=920,lvl=playerLevelInfo(player),power=calculatePlayerPower(player),owned=Object.keys(player.characters||{}); const ids=[...(player.showcase||[]).filter(id=>player.characters[id]),...owned.filter(id=>!(player.showcase||[]).includes(id)).sort((a,b)=>characterPower(player,b)-characterPower(player,a))].slice(0,10);
- let back=bg(W,H)+panel(65,80,340,760,C.gold)+panel(430,80,905,760,C.purple); let front=title('NEVERLESS RPG','TRAVELER PROFILE - ONE PANEL - LIVE PROGRESSION'); const imgs=[];
- imgs.push(await layer(user.avatarUrl,160,160,150,175,'cover',80)); front+=`<circle cx="230" cy="255" r="84" fill="none" stroke="${C.gold}" stroke-width="4"/>`;
- front+=ptext(95,370,user.username||player.username,5,C.text)+ptext(95,414,`LEVEL ${lvl.level}/${lvl.maxLevel}`,4,C.muted)+bar(95,452,275,18,lvl.progress,C.gold)+ptext(95,486,lvl.nextNeed?`${fmt(lvl.currentXp)}/${fmt(lvl.nextNeed)} XP`:'MAX LEVEL',3,C.text);
- front+=ptext(95,545,'POWER',3,C.muted)+ptext(95,578,fmt(power),6,C.text)+ptext(95,636,`CHAR ${owned.length}`,3,C.muted)+ptext(250,636,`RESIN ${player.resin}/160`,3,C.muted)+ptext(95,680,`MMR ${player.pvp?.mmr||1000}`,3,C.muted);
- imgs.push(await layer(PRIMO,44,44,95,735),await layer(MORA,44,44,240,735)); front+=ptext(145,744,fmt(player.primogems),3,C.text)+ptext(290,744,fmt(player.mora),3,C.text);
- front+=ptext(462,110,'SHOWCASE',5,C.text)+ptext(462,151,'LEVELS AND POWER DIRECTLY AFFECT DOMAIN CLEAR SPEED',3,C.muted);
- const sx=462,sy=190,sw=158,sh=264,g=15; for(let i=0;i<10;i++){const x=sx+(i%5)*(sw+g),y=sy+Math.floor(i/5)*(sh+g),id=ids[i];back+=panel(x,y,sw,sh,id?rarity(characters[id].rarity):C.line);if(id){const d=characters[id],o=player.characters[id];imgs.push(await layer(d.icon,118,118,x+20,y+16,'contain',14));front+=ptext(x+12,y+158,d.name,3,C.text)+ptext(x+12,y+188,`LV ${o.level}`,3,C.muted)+ptext(x+12,y+220,`PWR ${characterPower(player,id)}`,2,C.muted)+ptext(x+12,y+242,`${d.role}`,2,rarity(d.rarity));}else front+=ptext(x+sw/2,y+120,'EMPTY',3,C.muted,1,'middle');}
- front+=ptext(462,780,'BUILD A BALANCED TEAM: DPS + SUPPORT + TANK FOR STRONGER DOMAIN RUNS',3,C.muted); return compose(W,H,back,imgs,front);
+async function renderHomeCard(player,meta){
+  const W=1400,H=920,lvl=playerLevelInfo(player),power=calculatePlayerPower(player),owned=Object.keys(player.characters||{});
+  const ids=[...(player.showcase||[]).filter(id=>player.characters[id]),...owned.filter(id=>!(player.showcase||[]).includes(id)).sort((a,b)=>characterPower(player,b)-characterPower(player,a))].slice(0,8);
+  let back=bg(W,H),front=titleMain('NEVERLESS ADVENTURE','TRAVELER PROFILE'),imgs=[];
+  back+=panel(70,165,300,670,C.gold)+panel(400,165,930,670,C.purple);
+  back+=metricBox(86,515,268,'POWER',fmt(power),'primo')+metricBox(86,585,268,'RESIN',`${player.resin||0}/${player.resinMax||180}`,'resin');
+  back+=metricBox(86,655,126,'PRIMO',fmt(player.primogems||0),'primo')+metricBox(228,655,142,'MORA',fmt(player.mora||0),'mora');
+  const avatar=meta?.avatarUrl?await remote(meta.avatarUrl,118,118,'cover',59):null; if(avatar) imgs.push({input:avatar,left:161,top:215}); else back+=rect(161,215,118,118,59,'#131a2a',C.gold,2,.9);
+  back+=`<circle cx="220" cy="274" r="64" fill="none" stroke="${C.gold}" stroke-width="4" opacity=".9"/>`;
+  front+=ptext(95,355,cut(meta?.username||player.username||'Traveler',12),5,C.text)+ptext(95,405,`LEVEL ${lvl.level}/${lvl.maxLevel}`,3,C.text)+bar(96,445,240,16,lvl.progress,C.blue)+ptext(95,474,`${Math.round(lvl.currentXp)}/${Math.round(lvl.nextNeed||lvl.currentXp)} XP`,2,C.muted);
+  front+=ptext(420,186,'SHOWCASE',4,C.text);
+  const sx=420,sy=220,sw=168,sh=240,gx=14,gy=16;
+  for(let i=0;i<8;i++){
+    const x=sx+(i%4)*(sw+gx),y=sy+Math.floor(i/4)*(sh+gy),id=ids[i];
+    back+=panel(x,y,sw,sh,id?rarity(characters[id].rarity):C.line);
+    if(id){
+      const d=characters[id],o=player.characters[id];
+      const img=await remote(d.icon,120,120,'contain',14);
+      if(img) imgs.push({input:img,left:x+24,top:y+12}); else back+=rect(x+24,y+12,120,120,14,'#162136',rarity(d.rarity),1,.8);
+      front+=ptext(x+12,y+142,cut(d.name,12),2,C.text)+ptext(x+12,y+168,`LV ${o.level}`,2,C.muted)+ptext(x+12,y+192,`${safe(d.role)}`,2,rarity(d.rarity))+ptext(x+12,y+216,`PWR ${characterPower(player,id)}`,2,C.gold);
+    }else{
+      back+=rect(x+24,y+12,120,120,14,'#162136',C.line,1,.75);front+=ptext(x+sw/2,y+145,'EMPTY',2,C.muted,1,'middle');
+    }
+  }
+  return compose(W,H,back,imgs,front);
 }
 
-export async function renderWishCard(player,banner,last=[]){const W=1400,H=870;let back=bg(W,H,banner==='character'?C.purple:C.blue),front=title(banner==='character'?'CHARACTER WISH':'WEAPON WISH',`PRIMOGEMS ${fmt(player.primogems)} - 1 PULL 160 - 10 PULLS 1600 - 5 STAR PITY ${player.pity[banner]}/90 - 4 STAR ${player.pity[`${banner}Four`]}/10`),imgs=[];back+=panel(65,165,1270,640,C.gold);const arr=last.length?last:Array(10).fill(null),sx=90,sy=195,sw=235,sh=270,g=18;for(let i=0;i<10;i++){const x=sx+(i%5)*(sw+g),y=sy+Math.floor(i/5)*(sh+g),r=arr[i];back+=panel(x,y,sw,sh,r?rarity(r.rarity):C.line);if(r){const it=r.kind==='character'?characters[r.id]:weapons[r.id];imgs.push(await layer(it?.icon||it?.image,165,165,x+35,y+12,'contain',14));front+=ptext(x+12,y+194,it?.name||r.id,3,C.text)+ptext(x+12,y+225,r.duplicate?'DUPLICATE':'NEW',2,r.duplicate?C.muted:C.gold)+ptext(x+12,y+248,`${r.rarity} STAR`,2,rarity(r.rarity));}else front+=ptext(x+sw/2,y+128,'WISH SLOT',3,C.muted,1,'middle');}return compose(W,H,back,imgs,front);}
+async function renderWishCard(player,banner='character',results=[]){
+  const W=1400,H=900; let back=bg(W,H,banner==='character'?C.purple:C.gold),front=titleMain(banner==='character'?'CHARACTER WISH':'WEAPON WISH',`PRIMOGEMS ${fmt(player.primogems)} - 1 PULL 160 - 10 PULLS 1600`),imgs=[];
+  back+=panel(70,170,1260,570,banner==='character'?C.purple:C.gold);
+  const shown=results.slice(0,10),sx=95,sy=210,sw=112,sh=210,g=16;
+  for(let i=0;i<10;i++){
+    const x=sx+(i%5)*(sw+g),y=sy+Math.floor(i/5)*(sh+g),item=shown[i];
+    const accent=item?rarity(item.rarity):C.line;
+    back+=panel(x,y,sw,sh,accent);
+    if(item){
+      const imgUrl=item.kind==='character'?characters[item.id]?.icon:weapons[item.id]?.image;
+      const img=await remote(imgUrl,76,76,'contain',10); if(img) imgs.push({input:img,left:x+18,top:y+18});
+      const itemName=item.kind==='character'?characters[item.id]?.name:weapons[item.id]?.name;
+      front+=ptext(x+10,y+108,cut(itemName||item.id,14),2,C.text)+ptext(x+10,y+132,item.duplicate?'DUPLICATE':'NEW',2,item.duplicate?C.muted:C.gold)+ptext(x+10,y+156,`${item.rarity} STAR`,2,accent);
+    }
+  }
+  return compose(W,H,back,imgs,front);
+}
 
-export async function renderDomainCard(player,s){const W=1400,H=870,d=s.domainId?domains[s.domainId]:null;let back=bg(W,H,C.green),front=title('DOMAINS','SHORT EARLY RUNS - ROLE SYNERGY - LEVELS AND GEAR MATTER'),imgs=[];back+=panel(65,160,455,640,C.green)+panel(545,160,790,640,C.red);if(!d){front+=ptext(95,215,'CHOOSE A DOMAIN',5,C.text)+ptext(95,265,'FIRST DOMAIN IS DESIGNED FOR FAST STARTER CLEARS',3,C.muted);let yy=335;for(const q of Object.values(domains)){front+=ptext(95,yy,q.name,3,C.text)+ptext(95,yy+28,`LV ${q.level} - ${q.resin} RESIN - PWR ${q.recommendedPower}`,2,C.muted);yy+=70;}front+=ptext(585,215,'SELECT A DOMAIN TO SEE ENEMIES',4,C.text);return compose(W,H,back,imgs,front);}const prog=player.domainProgress?.[d.id]||{};front+=ptext(95,210,d.name,4,C.text)+ptext(95,250,`LEVEL ${d.level} - ${d.resin} RESIN`,3,C.muted)+ptext(95,290,`YOUR PWR ${calculatePlayerPower(player)}`,3,C.text)+ptext(95,326,`RECOMMENDED ${d.recommendedPower}`,3,C.muted)+ptext(95,365,`CLEARS ${prog.clears||0} - BEST ${prog.fastestTurns??'-'} TURNS`,2,C.muted)+ptext(95,420,'TEAM',3,C.gold);let yy=458;for(const id of (s.team||[]).slice(0,4)){front+=ptext(110,yy,`${characters[id]?.name} LV ${player.characters[id]?.level} - ${characters[id]?.role}`,2,C.text);yy+=34;}if(!(s.team||[]).length)front+=ptext(110,458,'NO TEAM SELECTED',2,C.muted);front+=ptext(95,625,'BONUS ELEMENTS',2,C.gold)+ptext(95,655,(d.bonusElements||[]).join(' + ')||'NONE',2,C.text)+ptext(95,700,'REWARDS',2,C.gold)+ptext(95,728,`${fmt(d.rewards.mora[0])}-${fmt(d.rewards.mora[1])} MORA`,2,C.text)+ptext(95,754,`${d.rewards.primogems} PRIMOGEMS`,2,C.text);front+=ptext(580,205,'ENEMIES',4,C.text);const ew=225,eh=300,g=22,sx=580,sy=250;for(let i=0;i<Math.min(3,d.enemies.length);i++){const e=d.enemies[i],x=sx+i*(ew+g);back+=panel(x,sy,ew,eh,C.red);imgs.push(await layer(e.image,150,150,x+38,sy+20,'contain',14));front+=ptext(x+12,sy+190,e.name,2,C.text)+ptext(x+12,sy+222,`HP ${e.hp}/${e.hp}`,2,C.green)+bar(x+12,sy+252,ew-24,12,1,C.red)+ptext(x+12,sy+272,`${e.element} - SPD ${e.spd}`,2,C.muted);}front+=ptext(580,610,'DOMAIN RULE',3,C.gold)+ptext(580,650,d.rule||'USE ROLES AND ELEMENTS TO CLEAR FASTER',2,C.muted)+ptext(580,690,'SUPPORT = BUFF/HEAL  TANK = DAMAGE REDUCTION  DPS = BONUS DAMAGE',2,C.muted);return compose(W,H,back,imgs,front);}
+async function renderDomainsCard(player,session={}){
+  const W=1400,H=900,d=session.domainId?domains[session.domainId]:null;let back=bg(W,H,C.cyan),front=titleMain('DOMAINS','SELECT A DOMAIN, BUILD A TEAM, FARM REWARDS'),imgs=[];
+  back+=panel(70,170,420,630,C.cyan)+panel(520,170,810,630,C.pink);
+  front+=ptext(95,200,'CHOOSE A DOMAIN',4,C.text);
+  const list=Object.values(domains); let yy=248;
+  for(const dom of list){
+    const active=d?.id===dom.id; const col=active?C.gold:C.text;
+    front+=ptext(95,yy,cut(dom.name,22),2,col)+ptext(95,yy+22,`LV ${dom.level} - ${dom.resin} RESIN - PWR ${dom.recommendedPower}`,2,C.muted);
+    yy+=62;
+  }
+  if(d){
+    front+=ptext(545,200,cut(d.name,24),4,C.text)+ptext(545,246,cut(d.description,50),2,C.muted)+ptext(545,274,`REWARDS: ${safe(d.rewardType)} - MORA - BOOKS - ARTIFACTS`,2,C.gold);
+    const prog=player.domainProgress?.[d.id]||{clears:0};
+    front+=ptext(545,306,`CLEARS ${prog.clears||0}${prog.fastestTurns?` - FASTEST ${prog.fastestTurns} TURNS`:''}`,2,C.muted);
+    const tiles=[];
+    const ex=560,ey=350,tw=210,th=180,gg=20;
+    for(let i=0;i<4;i++){
+      const enemy=d.enemies[i];
+      if(enemy){ const t=await entityTile(enemy.image,ex+(i%2)*(tw+gg),ey+Math.floor(i/2)*(th+gg),tw,th,enemy.name,C.pink); tiles.push(t); }
+      else back+=panel(ex+(i%2)*(tw+gg),ey+Math.floor(i/2)*(th+gg),tw,th,C.line);
+    }
+    for(const t of tiles){ back+=t.body; if(t.image) imgs.push(t.image); }
+    back+=metricBox(545,690,150,'RESIN',String(d.resin),'resin')+metricBox(710,690,180,'MORA',`${fmt(d.rewards.mora[0])}+`,'mora')+metricBox(905,690,180,'LEVEL BOOK',`${d.rewards.levelBooks[0]}-${d.rewards.levelBooks[1]}`,'book')+metricBox(1100,690,180,'TALENT BOOK',`${d.rewards.talentBooks[0]}-${d.rewards.talentBooks[1]}`,'book');
+  }else{
+    front+=ptext(700,330,'SELECT A DOMAIN TO SEE ENEMIES',3,C.text,1,'middle');
+  }
+  return compose(W,H,back,imgs,front);
+}
 
-export async function renderBattleCard(b){const W=1400,H=850,a=currentActor(b);let back=bg(W,H,b.winner?C.gold:C.red),front=title(b.winner?(b.winner==='player'?'VICTORY':'DEFEAT'):`TURN ${b.turn+1}`,b.winner?'BATTLE COMPLETE':`ACTING ${a?.name||'-'} - ${a?.role||'-'} - ENERGY ${a?.energy||0}`),imgs=[];const left=b.actors.filter(x=>x.side==='player'),right=b.actors.filter(x=>x.side==='enemy');front+=ptext(80,165,'YOUR TEAM',4,C.green)+ptext(760,165,'ENEMIES',4,C.red);function row(actor,x,y,w,color){back+=panel(x,y,w,126,actor.uid===b.pendingActorUid?C.gold:color);front+=ptext(x+118,y+18,actor.name,3,C.text)+ptext(x+118,y+50,`${actor.role} - SPD ${actor.spd} - EN ${actor.energy}`,2,C.muted)+ptext(x+118,y+78,`HP ${Math.round(actor.hp)}/${actor.maxHp}`,2,C.text)+bar(x+118,y+104,w-138,12,actor.hp/actor.maxHp,actor.side==='player'?C.green:C.red)+ptext(x+16,y+92,actor.hp>0?'ALIVE':'DOWN',2,actor.hp>0?C.green:C.red);imgs.push(layer(actor.icon||actor.image,88,88,x+16,y+12,'contain',12));}
- left.slice(0,4).forEach((q,i)=>row(q,75,200+i*140,590,C.green));right.slice(0,4).forEach((q,i)=>row(q,735,200+i*140,590,C.red));const resolved=[];for(const p of imgs)resolved.push(await p);front+=ptext(80,760,`LAST: ${b.log?.[0]||'BATTLE STARTED'}`,2,C.muted)+ptext(80,800,b.meta?.synergyLabel||'TEAM SYNERGY ACTIVE',2,C.gold);return compose(W,H,back,resolved,front);}
+async function renderBattleCard(battle,pendingAction=null){
+  const W=1400,H=900;let back=bg(W,H,battle.winner==='player'?C.gold:C.red),front='',imgs=[];
+  const players=battle.actors.filter(a=>a.side==='player'); const enemies=battle.actors.filter(a=>a.side==='enemy'); const ev=battle.lastEvent;
+  const heading=battle.winner?battle.winner==='player'?'VICTORY':'DEFEAT':`TURN ${battle.turn+1}`;
+  const sub=battle.winner? 'BATTLE COMPLETE' : `${currentActor(battle)?.name || 'WAITING'} - ${pendingAction ? pendingAction.toUpperCase() : 'CHOOSE SKILL'}`;
+  front+=titleMain(heading,sub);
+  back+=panel(70,170,600,650,C.green)+panel(730,170,600,650,C.red);
+  front+=ptext(95,200,'YOUR TEAM',4,C.green)+ptext(755,200,'ENEMIES',4,C.red);
+  const renderActorRow=async (a,x,y,w,enemy=false)=>{
+    const active=ev?.targetUid===a.uid; const accent=active?(enemy?C.red:C.green):enemy?C.pink:C.cyan;
+    back+=panel(x,y,w,110,accent);
+    const img=await remote(a.icon||a.image,72,72,'contain',10); if(img) imgs.push({input:img,left:x+10+(active && enemy?8:0),top:y+18});
+    front+=ptext(x+96,y+16,cut(a.name,15),2,C.text)+ptext(x+96,y+38,`${safe(a.role||'ENEMY')} - SPD ${Math.round(a.spd)}`,2,C.muted)+ptext(x+96,y+60,`HP ${Math.round(a.hp)}/${Math.round(a.maxHp)}`,2,C.text);
+    if(!enemy) front+=ptext(x+96,y+82,`EN ${Math.round(a.energy||0)}${a.shield?` - SH ${Math.round(a.shield)}`:''}`,2,C.gold);
+    else front+=ptext(x+96,y+82,`EN ${Math.round(a.energy||0)}`,2,C.muted);
+    back+=bar(x+96,y+88,w-116,10,a.hp/a.maxHp,enemy?C.red:C.green);
+    if(a.hp<=0) front+=ptext(x+12,y+86,'DOWN',2,C.red);
+  };
+  let py=235; for(const a of players){ await renderActorRow(a,95,py,550,false); py+=122; }
+  let ey=235; for(const a of enemies){ await renderActorRow(a,755,ey,550,true); ey+=122; }
+  if(ev){
+    const tag=ev.damage?`@${safe(ev.targetName)} - ${ev.damage} DMG${ev.crit?' CRIT':''}`:ev.healed?`${safe(ev.actorName)} +${ev.healed} HEAL`:safe(ev.skillName);
+    front+=ptext(700,760,tag,3,ev.damage?C.red:C.green,1,'middle');
+    front+=ptext(700,792,cut(ev.skillName,30),2,C.gold,1,'middle');
+  }
+  if(battle.winner && battle.rewards){
+    back+=panel(300,645,800,130,battle.winner==='player'?C.gold:C.red);
+    front+=ptext(700,668,'REWARDS',4,C.text,1,'middle');
+    let rx=365; const items=[];
+    items.push(['mora',`+${fmt(battle.rewards.mora)}`]);
+    if((battle.rewards.artifactSummary||[]).length) items.push(['book',`+${battle.rewards.artifactSummary.length}X ARTIFACT`]);
+    items.push(['book',`+${battle.rewards.levelBooks||0}X LEVEL BOOK`]);
+    if(battle.rewards.talentBooks) items.push(['book',`+${battle.rewards.talentBooks}X TALENT BOOK`]);
+    for(const [kind,text] of items){back+=rect(rx,704,170,46,12,'#162136',battle.winner==='player'?C.gold:C.red,1,.92)+drawIcon(kind,rx+10,714,24);front+=ptext(rx+42,719,text,2,C.text);rx+=185;}
+  }else if(battle.log?.length){
+    front+=ptext(700,822,cut(battle.log[0],52),2,C.muted,1,'middle');
+  }
+  return compose(W,H,back,imgs,front);
+}
 
-export async function renderRosterCard(player){const W=1400,H=900,ids=Object.keys(player.characters);let back=bg(W,H),front=title('CHARACTERS','LEVEL UP - EQUIP - CHANGE SHOWCASE - EVERY ROLE HAS A PURPOSE'),imgs=[];const sx=70,sy=170,sw=245,sh=210,g=22;for(let i=0;i<15;i++){const x=sx+(i%5)*(sw+g),y=sy+Math.floor(i/5)*(sh+g),id=ids[i];back+=panel(x,y,sw,sh,id?rarity(characters[id].rarity):C.line);if(id){const d=characters[id],o=player.characters[id];imgs.push(await layer(d.icon,120,120,x+62,y+8,'contain',12));front+=ptext(x+12,y+142,d.name,3,C.text)+ptext(x+12,y+172,`LV ${o.level} - ${d.role}`,2,C.muted)+ptext(x+12,y+192,`PWR ${characterPower(player,id)}`,2,C.gold);}}return compose(W,H,back,imgs,front);}
-export async function renderCharacterCard(player,id){const b=buildCharacterStats(player,id),W=1400,H=860;if(!b)return renderRosterCard(player);let back=bg(W,H,rarity(b.definition.rarity)),front=title(b.definition.name,`${b.definition.element} - ${b.definition.role} - ${b.definition.weaponType}`),imgs=[];back+=panel(70,165,430,610,rarity(b.definition.rarity))+panel(530,165,800,610,C.purple);imgs.push(await layer(b.definition.image,380,560,95,190,'contain',18));front+=ptext(565,205,`LEVEL ${b.owned.level} - C${b.owned.constellation} - PWR ${characterPower(player,id)}`,3,C.gold)+ptext(565,260,`HP ${b.stats.hp}`,3,C.text)+ptext(565,300,`ATK ${b.stats.atk}`,3,C.text)+ptext(565,340,`DEF ${b.stats.def}`,3,C.text)+ptext(565,380,`CRIT ${Math.round(b.stats.critRate*100)}%`,3,C.text)+ptext(565,420,`CRIT DMG ${Math.round(b.stats.critDmg*100)}%`,3,C.text)+ptext(565,460,`SPD ${b.stats.spd}`,3,C.text)+ptext(565,525,'ROLE VALUE',3,C.gold)+ptext(565,565,b.definition.role==='DPS'?'DEALS 18% MORE DAMAGE':b.definition.role==='Support'?'HEALS AND BUFFS 25% STRONGER':'TAKES LESS DAMAGE AND TAUNTS',2,C.muted)+ptext(565,625,'SKILLS',3,C.gold)+ptext(565,665,b.definition.skills.normal.name,2,C.text)+ptext(565,695,b.definition.skills.skill.name,2,C.text)+ptext(565,725,b.definition.skills.burst.name,2,C.text);return compose(W,H,back,imgs,front);}
-export async function renderSimpleCard(titleName,subtitle,lines=[]){const W=1400,H=820;let back=bg(W,H),front=title(titleName,subtitle);back+=panel(70,165,1260,575,C.purple);let y=215;for(const l of lines.slice(0,18)){front+=ptext(100,y,l,3,C.text);y+=32;}return compose(W,H,back,[],front);}
-export async function renderCpuCard(player,s){return renderSimpleCard('CPU ARENA','TEST YOUR TEAM ROLES AND BUILD',['CHOOSE 4 CHARACTERS','DPS DEALS MORE DAMAGE','SUPPORT BUFFS AND HEALS','TANK REDUCES DAMAGE AND DRAWS ATTACKS',`YOUR POWER ${calculatePlayerPower(player)}`,`TEAM ${(s.team||[]).map(id=>characters[id]?.name).join(' / ')||'NOT SELECTED'}`]);}
-export async function renderInventoryCard(player){const lines=[`CHARACTERS ${Object.keys(player.characters).length}`,`WEAPONS ${Object.keys(player.weapons).length}`,`ARTIFACTS ${Object.keys(player.artifacts).length}`,`PRIMOGEMS ${fmt(player.primogems)}`,`MORA ${fmt(player.mora)}`,...Object.keys(player.weapons).slice(0,10).map(id=>`${weapons[id]?.name} R${player.weapons[id]?.refinement||1} LV ${player.weapons[id]?.level||1}`)];return renderSimpleCard('INVENTORY','YOUR SAVED ACCOUNT COLLECTION',lines);}
-export async function renderArtifactsCard(player){const lines=Object.values(player.artifacts).slice(0,15).map(a=>`${artifactSets[a.setId]?.name||a.setId} - ${a.slot} +${a.level} - ${a.rarity} STAR`);return renderSimpleCard('ARTIFACTS','EQUIP PIECES TO RAISE POWER AND CLEAR DOMAINS FASTER',lines.length?lines:['NO ARTIFACTS - CLEAR A DOMAIN FIRST']);}
-export async function renderUpgradesCard(player){const p=player.passive||{};return renderSimpleCard('ACCOUNT UPGRADES','PERMANENT PROGRESSION FOR ALL CHARACTERS',[`ATK LV ${p.atk||0}`,`HP LV ${p.hp||0}`,`CRIT RATE LV ${p.critRate||0}`,`CRIT DMG LV ${p.critDmg||0}`,`SPD LV ${p.spd||0}`,`MORA ${fmt(player.mora)}`]);}
+async function renderRosterCard(player){
+  const W=1400,H=900,ids=Object.keys(player.characters);let back=bg(W,H),front=titleMain('CHARACTERS','INSPECT, UPGRADE, EQUIP, AND SET SHOWCASE'),imgs=[];const sx=70,sy=170,sw=245,sh=210,g=22;
+  for(let i=0;i<15;i++){const x=sx+(i%5)*(sw+g),y=sy+Math.floor(i/5)*(sh+g),id=ids[i];back+=panel(x,y,sw,sh,id?rarity(characters[id].rarity):C.line);if(id){const d=characters[id],o=player.characters[id];const img=await remote(d.icon,120,120,'contain',12); if(img) imgs.push({input:img,left:x+62,top:y+8});front+=ptext(x+12,y+142,cut(d.name,18),2,C.text)+ptext(x+12,y+166,`LV ${o.level} - ${safe(d.role)}`,2,C.muted)+ptext(x+12,y+190,`PWR ${characterPower(player,id)}`,2,C.gold);}}
+  return compose(W,H,back,imgs,front);
+}
 
-export async function renderViewCard(view,player,session,user={}){let buffer,name;switch(view){case'wish':buffer=await renderWishCard(player,session.banner,session.lastWish);name='neverless-wish.png';break;case'domains':buffer=await renderDomainCard(player,session);name='neverless-domain.png';break;case'cpu':buffer=await renderCpuCard(player,session);name='neverless-cpu.png';break;case'characters':buffer=session.selectedChar?await renderCharacterCard(player,session.selectedChar):await renderRosterCard(player);name='neverless-characters.png';break;case'inventory':buffer=await renderInventoryCard(player);name='neverless-inventory.png';break;case'artifacts':buffer=await renderArtifactsCard(player);name='neverless-artifacts.png';break;case'upgrades':buffer=await renderUpgradesCard(player);name='neverless-upgrades.png';break;default:buffer=session.battle?await renderBattleCard(session.battle):await renderHomeCard(player,user);name=session.battle?'neverless-battle.png':'neverless-profile.png';}return{buffer,name};}
+async function renderCharacterCard(player,id){
+  const b=buildCharacterStats(player,id),W=1400,H=900;if(!b)return renderRosterCard(player);let back=bg(W,H,rarity(b.definition.rarity)),front=titleMain(cut(b.definition.name,22),`${safe(b.definition.element)} - ${safe(b.definition.role)} - ${safe(b.definition.weaponType)}`),imgs=[];
+  back+=panel(70,165,380,640,rarity(b.definition.rarity))+panel(480,165,850,640,C.purple);
+  const portrait=await remote(b.definition.image,330,560,'contain',18); if(portrait) imgs.push({input:portrait,left:95,top:200});
+  front+=ptext(510,198,`LEVEL ${b.owned.level} - C${b.owned.constellation} - PWR ${characterPower(player,id)}`,3,C.gold);
+  const ownedArts=(b.owned.artifactIds||[]).map(aid=>player.artifacts[aid]).filter(Boolean);
+  const artMap=Object.fromEntries(ownedArts.map(a=>[a.slot,a]));
+  const ax=510, ay=235, aw=100, ah=100, ag=14;
+  for(let i=0;i<5;i++){
+    const slot=artifactSlots[i]; const art=artMap[slot]; const x=ax+i*(aw+ag); back+=panel(x,ay,aw,ah,art?rarity(art.rarity):C.line);
+    front+=ptext(x+aw/2,ay+72,slot,2,art?C.gold:C.muted,1,'middle');
+    if(art){front+=ptext(x+aw/2,ay+18,`${art.rarity} STAR`,2,C.text,1,'middle');front+=ptext(x+aw/2,ay+42,cut(art.main.key,10),2,C.muted,1,'middle');}
+    else front+=ptext(x+aw/2,ay+38,'EMPTY',2,C.muted,1,'middle');
+  }
+  const weapon=b.owned.weaponId?weapons[b.owned.weaponId]:null;
+  back+=panel(1088,235,210,100,weapon?rarity(weapon.rarity):C.line);
+  if(weapon){const wimg=await remote(weapon.image,62,62,'contain',10); if(wimg) imgs.push({input:wimg,left:1102,top:253}); front+=ptext(1172,252,cut(weapon.name,12),2,C.text)+ptext(1172,278,`${weapon.rarity} STAR - ATK ${weapon.atk}`,2,C.muted)+ptext(1172,302,`${safe(weapon.type)}`,2,C.gold);} else front+=ptext(1193,273,'NO WEAPON',2,C.muted,1,'middle');
+  front+=statLine(520,372,'HP',fmt(b.stats.hp))+statLine(520,404,'ATK',fmt(b.stats.atk))+statLine(520,436,'DEF',fmt(b.stats.def))+statLine(520,468,'SPD',String(Math.round(b.stats.spd)))+statLine(520,500,'CRIT',`${Math.round(b.stats.critRate*100)}%`)+statLine(520,532,'CRIT DMG',`${Math.round(b.stats.critDmg*100)}%`);
+  front+=ptext(520,580,'ROLE VALUE',3,C.gold)+ptext(520,618,b.definition.role==='DPS'?'HIGHER DAMAGE AND FASTER CLEARS':b.definition.role==='Support'?'BETTER HEALING, BUFFS AND ENERGY':'SHIELDS, TAUNT, AND SURVIVABILITY',2,C.muted);
+  front+=ptext(520,665,'SKILLS',3,C.gold)+ptext(520,703,cut(b.definition.skills.normal.name,28),2,C.text)+ptext(520,731,cut(b.definition.skills.skill.name,28),2,C.text)+ptext(520,759,cut(b.definition.skills.burst.name,28),2,C.text);
+  return compose(W,H,back,imgs,front);
+}
+
+async function renderInventoryCard(player){
+  const W=1400,H=900; let back=bg(W,H),front=titleMain('INVENTORY','RESOURCES, BOOKS, WEAPONS, AND SAVED COLLECTION'),imgs=[];
+  back+=panel(70,170,1260,650,C.purple);
+  back+=metricBox(110,220,220,'PRIMOGEMS',fmt(player.primogems),'primo')+metricBox(350,220,220,'MORA',fmt(player.mora),'mora')+metricBox(590,220,220,'RESIN',`${player.resin}/${player.resinMax||180}`,'resin')+metricBox(830,220,220,'LEVEL BOOKS',fmt(player.books?.level||0),'book')+metricBox(1070,220,220,'TALENT BOOKS',fmt(player.books?.talent||0),'book');
+  back+=panel(110,320,560,420,C.cyan)+panel(700,320,590,420,C.gold);
+  front+=ptext(135,348,'WEAPONS',3,C.text)+ptext(725,348,'COLLECTION',3,C.text);
+  let wy=388; for(const wid of Object.keys(player.weapons).slice(0,8)){const w=weapons[wid], owned=player.weapons[wid]; front+=ptext(135,wy,cut(w.name,20),2,C.text)+ptext(430,wy,`R${owned.refinement} LV ${owned.level}`,2,C.gold); wy+=34;}
+  const lines=[`CHARACTERS ${Object.keys(player.characters).length}`,`WEAPONS ${Object.keys(player.weapons).length}`,`ARTIFACTS ${Object.keys(player.artifacts).length}`,`WISH HISTORY ${(player.history?.wishes||[]).length}`,`BATTLES ${(player.history?.battles||[]).length}`,`MMR ${player.pvp?.mmr||1000}`];
+  let iy=388; for(const ln of lines){ front+=ptext(725,iy,ln,2,C.text); iy+=38; }
+  return compose(W,H,back,imgs,front);
+}
+
+async function renderArtifactsCard(player){
+  const W=1400,H=900; let back=bg(W,H,C.gold),front=titleMain('ARTIFACTS','EQUIP PIECES TO RAISE POWER AND CLEAR DOMAINS FASTER'),imgs=[];
+  back+=panel(70,170,1260,650,C.gold); let y=220; const items=Object.values(player.artifacts).slice(0,14);
+  for(const art of items){const set=artifactSets[art.setId];front+=ptext(105,y,`${cut(set?.name||art.setId,22)} - ${safe(art.slot)} +${art.level} - ${art.rarity} STAR`,2,C.text)+ptext(840,y,cut(`${art.main.key}`,18),2,C.muted); y+=34;}
+  return compose(W,H,back,imgs,front);
+}
+
+async function renderUpgradesCard(player){
+  const W=1400,H=860; let back=bg(W,H,C.cyan),front=titleMain('PERMANENT UPGRADES','SPEND MORA TO IMPROVE YOUR ENTIRE ACCOUNT'),imgs=[];
+  back+=panel(130,190,1140,540,C.cyan);
+  const entries=[['ATK',player.passive?.atk||0],['HP',player.passive?.hp||0],['CRIT RATE',player.passive?.critRate||0],['CRIT DMG',player.passive?.critDmg||0],['SPD',player.passive?.spd||0]];
+  let y=255; for(const [k,v] of entries){back+=rect(180,y-12,1040,52,12,'#162136',C.line,1,.92);front+=ptext(210,y,k,3,C.text)+ptext(1080,y,`LV ${v}`,3,C.gold,1,'end'); y+=85;}
+  return compose(W,H,back,imgs,front);
+}
+
+export async function renderViewCard(view,player,session={},meta={}){
+  let buffer,name;
+  if(session?.battle||view==='battle'){buffer=await renderBattleCard(session.battle,session.pendingAction);name='neverless-battle.png';}
+  else if(view==='wish'){buffer=await renderWishCard(player,session.banner,session.lastWish||[]);name='neverless-wish.png';}
+  else if(view==='domains'){buffer=await renderDomainsCard(player,session);name='neverless-domains.png';}
+  else if(view==='characters' || view==='weaponEquip' || view==='artifactEquip'){buffer=session.selectedChar?await renderCharacterCard(player,session.selectedChar):await renderRosterCard(player);name='neverless-characters.png';}
+  else if(view==='inventory'){buffer=await renderInventoryCard(player);name='neverless-inventory.png';}
+  else if(view==='artifacts'){buffer=await renderArtifactsCard(player);name='neverless-artifacts.png';}
+  else if(view==='upgrades'){buffer=await renderUpgradesCard(player);name='neverless-upgrades.png';}
+  else {buffer=await renderHomeCard(player,meta);name='neverless-profile.png';}
+  return { buffer, name };
+}
+
+export { renderHomeCard, renderWishCard, renderDomainsCard, renderBattleCard, renderRosterCard, renderCharacterCard, renderInventoryCard, renderArtifactsCard, renderUpgradesCard };
