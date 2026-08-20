@@ -1,15 +1,15 @@
 {
   "name": "neverless-rpg",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
-  "description": "Discord-native Neverless RPG with Genshin-inspired gacha, domains, progression and battle systems.",
+  "description": "Discord-native Neverless mini RPG with Genshin-inspired gacha, domains, progression and role-based combat.",
   "type": "module",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
     "test": "node --test",
-    "check": "node --check src/index.js && node --check src/game/battle.js && node --check src/game/wish.js && node --check src/game/progression.js && node --check src/game/stats.js && node --check src/ui/render.js && node --check src/ui/cards-v3.js && node --check src/ui/components.js"
+    "check": "node --check src/index.js && node --check src/game/battle.js && node --check src/game/wish.js && node --check src/game/progression.js && node --check src/game/stats.js && node --check src/ui/render.js && node --check src/ui/cards-v3.js && node --check src/ui/components.js && node --check src/data/domains.js"
   },
   "engines": {
     "node": ">=20"
