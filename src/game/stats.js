@@ -78,10 +78,12 @@ export function characterPower(player, charId) {
     const subs = Object.values(a.subs || {}).reduce((s, v) => s + (typeof v === 'number' ? Math.abs(v) : 0), 0);
     return sum + a.rarity * 120 + a.level * 34 + Math.round(subs * 420);
   }, 0);
+  const talents = owned.talents || { normal:1, skill:1, burst:1 };
+  const talentScore = Object.values(talents).reduce((sum, level) => sum + Math.max(1, Number(level) || 1) * 115, 0);
   const gear = (weapon?.rarity || 0) * 230 + (player.weapons[weapon?.id]?.level || 0) * 16 + artifactScore;
   const combat = stats.atk * 4.2 + stats.hp * 0.34 + stats.def * 1.25 + stats.spd * 7.5
     + pctValue(stats.critRate) * 2100 + pctValue(stats.critDmg) * 850;
-  const progression = owned.level * 58 + owned.constellation * 280 + definition.rarity * 350;
+  const progression = owned.level * 58 + owned.constellation * 280 + definition.rarity * 350 + talentScore;
   return Math.max(1, Math.round(combat + gear + progression));
 }
 

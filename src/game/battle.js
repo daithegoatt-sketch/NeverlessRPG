@@ -3,13 +3,26 @@ import { buildCharacterStats } from './stats.js';
 const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
 const alive = (actor) => actor.hp > 0;
 
+function scaledSkills(definition, owned) {
+  const levels = owned.talents || { normal:1, skill:1, burst:1 };
+  const skills = structuredClone(definition.skills);
+  for (const key of ['normal','skill','burst']) {
+    const level = Math.max(1, Math.min(10, Number(levels[key]) || 1));
+    if (skills[key]) {
+      skills[key].talentLevel = level;
+      if (Number.isFinite(skills[key].multiplier)) skills[key].multiplier *= 1 + (level - 1) * 0.06;
+    }
+  }
+  return skills;
+}
+
 function playerActor(player, charId, side = 'player') {
   const built = buildCharacterStats(player, charId);
   if (!built) throw new Error(`Unknown/unowned character: ${charId}`);
   return {
     uid:`${side}:${charId}`, side, id:charId, name:built.definition.name,
     image:built.definition.image, icon:built.definition.icon, element:built.definition.element,
-    role:built.definition.role, skills:structuredClone(built.definition.skills),
+    role:built.definition.role, skills:scaledSkills(built.definition,built.owned),
     maxHp:built.stats.hp, hp:built.stats.hp, atk:built.stats.atk, def:built.stats.def, spd:built.stats.spd,
     critRate:built.stats.critRate, critDmg:built.stats.critDmg, elementDmg:built.stats.elementDmg || 0,
     energy:0, shield:0, atkBuff:0, dmgTakenAmp:0, cooldowns:{ skill:0 },
@@ -24,9 +37,9 @@ function enemyActor(enemy, idx) {
     critRate:0.08, critDmg:0.50, elementDmg:0, energy:0, shield:0, atkBuff:0, dmgTakenAmp:0,
     cooldowns:{ skill:0 },
     skills:{
-      normal:{ name:'Attack', type:'damage', multiplier:1.00, energy:25, description:'Standard enemy attack for 1.00× ATK.' },
-      skill:{ name:skillName, type:'damage', multiplier:1.45, energy:35, cooldown:1, description:'Enemy skill attack for 1.45× ATK.' },
-      burst:{ name:'Rage', type:'damage', multiplier:2.10, cost:80, description:'Enemy burst attack for 2.10× ATK.' },
+      normal:{ name:'Attack', type:'damage', multiplier:1.00, energy:25, talentLevel:1, description:'Standard enemy attack for 1.00× ATK.' },
+      skill:{ name:skillName, type:'damage', multiplier:1.45, energy:35, cooldown:1, talentLevel:1, description:'Enemy skill attack for 1.45× ATK.' },
+      burst:{ name:'Rage', type:'damage', multiplier:2.10, cost:80, talentLevel:1, description:'Enemy burst attack for 2.10× ATK.' },
     },
   };
 }
@@ -99,8 +112,9 @@ export function act(battle, actorUid, action, targetUid, rng = Math.random) {
 
   const event = {
     actorUid:actor.uid, actorName:actor.name, actorSide:actor.side, actorElement:actor.element,
-    action, skillName:skill.name, skillDescription:skill.description || '', targetUid:target?.uid || null,
-    targetName:target?.name || null, damage:0, healed:0, shield:0, crit:false, buff:false, debuff:false,
+    action, skillName:skill.name, skillDescription:skill.description || '', talentLevel:skill.talentLevel || 1,
+    targetUid:target?.uid || null, targetName:target?.name || null,
+    damage:0, healed:0, shield:0, crit:false, buff:false, debuff:false,
   };
   let line = '';
 
@@ -111,7 +125,7 @@ export function act(battle, actorUid, action, targetUid, rng = Math.random) {
     const roll = damageRoll(actor,target,skill.multiplier,rng);
     const applied = applyDamage(target,roll.damage);
     event.damage = applied.damage; event.absorbed = applied.absorbed; event.crit = roll.crit;
-    line = `${actor.name} used ${skill.name} on ${target.name}: ${applied.damage} DMG${roll.crit ? ' CRIT' : ''}.`;
+    line = `${actor.name} used ${skill.name} (Talent Lv.${event.talentLevel}) on ${target.name}: ${applied.damage} DMG${roll.crit ? ' CRIT' : ''}.`;
 
     if (skill.type === 'damageShield') { event.shield = Math.round(actor.maxHp*0.15); actor.shield += event.shield; }
     if (skill.type === 'damageDebuff') { target.dmgTakenAmp = clamp(target.dmgTakenAmp+0.10,0,0.35); event.debuff = true; }
@@ -121,23 +135,23 @@ export function act(battle, actorUid, action, targetUid, rng = Math.random) {
   } else if (skill.type === 'heal') {
     if (!target || target.side !== actor.side) target = friends.sort((a,b) => a.hp/a.maxHp - b.hp/b.maxHp)[0];
     event.targetUid = target.uid; event.targetName = target.name; event.healed = heal(target,target.maxHp*skill.multiplier);
-    line = `${actor.name} used ${skill.name} and healed ${target.name} for ${event.healed} HP.`;
+    line = `${actor.name} used ${skill.name} (Talent Lv.${event.talentLevel}) and healed ${target.name} for ${event.healed} HP.`;
   } else if (skill.type === 'teamHeal') {
     for (const a of friends) event.healed += heal(a,a.maxHp*skill.multiplier);
     event.targetName = 'team';
-    line = `${actor.name} used ${skill.name} and restored ${event.healed} team HP.`;
+    line = `${actor.name} used ${skill.name} (Talent Lv.${event.talentLevel}) and restored ${event.healed} team HP.`;
   } else if (skill.type === 'teamBuffHeal') {
     for (const a of friends) { event.healed += heal(a,a.maxHp*skill.multiplier); a.atkBuff = clamp(a.atkBuff+0.18,0,0.50); }
     event.targetName = 'team'; event.buff = true;
-    line = `${actor.name} used ${skill.name}: team healed ${event.healed} HP and gained ATK.`;
+    line = `${actor.name} used ${skill.name} (Talent Lv.${event.talentLevel}): team healed ${event.healed} HP and gained ATK.`;
   } else if (skill.type === 'shield') {
     event.shield = Math.round(actor.maxHp*skill.multiplier); actor.shield += event.shield;
     event.targetName = actor.name;
-    line = `${actor.name} used ${skill.name} and gained ${event.shield} shield.`;
+    line = `${actor.name} used ${skill.name} (Talent Lv.${event.talentLevel}) and gained ${event.shield} shield.`;
   } else if (skill.type === 'teamBuff') {
     for (const a of friends) a.atkBuff = clamp(a.atkBuff+skill.multiplier,0,0.50);
     event.targetName = 'team'; event.buff = true;
-    line = `${actor.name} used ${skill.name} and strengthened the team.`;
+    line = `${actor.name} used ${skill.name} (Talent Lv.${event.talentLevel}) and strengthened the team.`;
   }
 
   if (action === 'burst') actor.energy = 0;

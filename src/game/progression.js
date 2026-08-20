@@ -1,30 +1,95 @@
 import { artifactSets, generateArtifact } from '../data/artifacts.js';
 import { domains } from '../data/domains.js';
 
-export function grantDomainRewards(player, domainId, rng = Math.random) {
+export function characterLevelCost(level) {
+  return 2500 + Math.max(1, level) * 450;
+}
+
+export function talentUpgradeCost(level) {
+  return 12000 + Math.max(1, level) * 6500;
+}
+
+export function grantDomainRewards(player, domainId, rng = Math.random, options = {}) {
   const domain = domains[domainId];
   if (!domain) return null;
+  player.domainProgress ||= {};
+  const progress = player.domainProgress[domainId] ||= { clears: 0, fastestTurns: null, quickClears: 0 };
+  const firstClear = progress.clears === 0;
   const [min,max] = domain.rewards.mora;
   const mora = Math.floor(min + (max-min+1)*rng());
   const setId = domain.setIds[Math.floor(rng()*domain.setIds.length)];
-  const artifact = generateArtifact(setId,5,rng);
+  const rarity = domain.level >= 3 ? 5 : (rng() < 0.72 ? 5 : 4);
+  const artifact = generateArtifact(setId,rarity,rng);
+  const basePrimos = domain.rewards.primogems;
+  const firstClearBonus = firstClear ? (domain.firstClearPrimogems || 0) : 0;
+  const primogems = basePrimos + firstClearBonus;
+  const adventureXp = domain.rewards.adventureXp || 100;
+
   player.mora += mora;
-  player.primogems += domain.rewards.primogems;
+  player.primogems += primogems;
   player.artifacts[artifact.id] = artifact;
-  player.adventureXp += domain.rewards.adventureXp || 100;
-  return { mora, primogems:domain.rewards.primogems, adventureXp:domain.rewards.adventureXp || 100, artifact, set:artifactSets[setId] };
+  player.adventureXp += adventureXp;
+
+  progress.clears += 1;
+  if (options.quick) progress.quickClears += 1;
+  if (Number.isFinite(options.turns)) {
+    progress.fastestTurns = progress.fastestTurns == null ? options.turns : Math.min(progress.fastestTurns, options.turns);
+  }
+  progress.lastClearAt = Date.now();
+
+  return {
+    mora,
+    primogems,
+    basePrimos,
+    firstClearBonus,
+    adventureXp,
+    artifact,
+    set: artifactSets[setId],
+    clears: progress.clears,
+  };
 }
 
-export function levelCharacter(player, charId) {
+export function levelCharacter(player, charId, amount = 1) {
   const owned = player.characters[charId];
   if (!owned) return { ok:false, reason:'NOT_OWNED' };
+  const requested = Math.max(1, Math.min(10, Number(amount) || 1));
   if (owned.level >= 90) return { ok:false, reason:'MAX_LEVEL' };
-  const cost = 2500 + owned.level * 450;
+
+  let levels = 0;
+  let totalCost = 0;
+  for (let i = 0; i < requested && owned.level + levels < 90; i += 1) {
+    totalCost += characterLevelCost(owned.level + levels);
+    levels += 1;
+  }
+  if (player.mora < totalCost) return { ok:false, reason:'NO_MORA', cost:totalCost };
+
+  player.mora -= totalCost;
+  owned.level += levels;
+  player.adventureXp += 12 * levels;
+  return { ok:true, cost:totalCost, level:owned.level, levels };
+}
+
+export function upgradeTalent(player, charId, talent) {
+  const owned = player.characters[charId];
+  if (!owned) return { ok:false, reason:'NOT_OWNED' };
+  if (!['normal','skill','burst'].includes(talent)) return { ok:false, reason:'INVALID_TALENT' };
+  owned.talents ||= { normal:1, skill:1, burst:1 };
+  const current = owned.talents[talent] || 1;
+  if (current >= 10) return { ok:false, reason:'TALENT_MAX' };
+  const cost = talentUpgradeCost(current);
   if (player.mora < cost) return { ok:false, reason:'NO_MORA', cost };
   player.mora -= cost;
-  owned.level += 1;
-  player.adventureXp += 12;
-  return { ok:true, cost, level:owned.level };
+  owned.talents[talent] = current + 1;
+  player.adventureXp += 24;
+  return { ok:true, cost, level:owned.talents[talent] };
+}
+
+export function setShowcase(player, ids) {
+  const owned = new Set(Object.keys(player.characters || {}));
+  const unique = [...new Set(ids || [])].filter((id) => owned.has(id)).slice(0, 10);
+  if (!unique.length) return { ok:false, reason:'EMPTY_SHOWCASE' };
+  player.showcase = unique;
+  return { ok:true, showcase:unique };
 }
 
 export function upgradePassive(player, stat) {

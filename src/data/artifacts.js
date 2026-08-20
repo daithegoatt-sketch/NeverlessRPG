@@ -7,6 +7,14 @@ export const artifactSets = {
     id: 'wanderer', name: "Wanderer's Troupe", twoPiece: { critDmg: 0.12 },
     image: 'https://enka.network/ui/UI_RelicIcon_15002_4.png',
   },
+  noblesse: {
+    id: 'noblesse', name: 'Noblesse Oblige', twoPiece: { elementDmg: 0.12 },
+    image: 'https://enka.network/ui/UI_RelicIcon_15007_4.png',
+  },
+  emblem: {
+    id: 'emblem', name: 'Emblem of Severed Fate', twoPiece: { spd: 4 },
+    image: 'https://enka.network/ui/UI_RelicIcon_15020_4.png',
+  },
 };
 
 export const artifactSlots = ['Flower', 'Plume', 'Sands', 'Goblet', 'Circlet'];
