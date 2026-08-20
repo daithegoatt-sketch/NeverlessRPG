@@ -1,20 +1,21 @@
 # NeverlessRPG
 
-A Discord-native RPG prototype inspired by Genshin Impact systems: wishing, character ownership, weapons, artifacts, domains, progression, a speed-based turn engine and a CPU arena.
+NeverlessRPG is a Discord-native RPG/gacha prototype inspired by Genshin-style progression. The current build is locked to the private test channel and uses generated image cards instead of text-heavy embeds for the main game UI.
 
-## Current test scope
+## V2 UI / gameplay
 
-- Locked to Discord channel `1539226931319545936` by default.
-- Start command: `-neverless`.
-- One persistent panel message per invocation; buttons/select menus edit the same embed instead of creating a chain of new embeds.
-- Character and weapon wishing (`x1` / `x10`) with 4★ and 5★ pity.
-- Starter account with four characters and test Primogems/Mora.
-- Character inventory, weapon equipping and artifact equipping.
-- Artifact farming through Domains.
-- Character leveling and permanent passive upgrades (ATK / HP / CRIT / SPD).
-- CPU Arena using the same combat engine intended to power PvP.
-- Speed/initiative-based turns, Normal / Skill / Burst, healing, shields, buffs, debuffs and targeting.
-- Battle history and MMR scaffold.
+- Start with `-neverless` in channel `1539226931319545936`.
+- Dynamic PNG dashboard generated per player: Discord avatar, account Lv. 1–20, XP bar, PWR, resources, MMR and a framed roster grid.
+- Main navigation is one Discord select-menu box instead of eight large buttons.
+- Character roster cards show portraits, rarity, level and PWR.
+- Character detail card shows full art, combat stats, weapon, constellation and Normal / Skill / Burst descriptions and multipliers.
+- Wish ×1 / ×10 creates a visual results board with one tile per character or weapon, rarity framing and duplicate state.
+- Inventory card displays character and weapon grids.
+- Domain cards show recommended PWR, Resin cost, reward range and enemy portraits (Slimes, Hilichurls, Abyss/Ruin enemies).
+- Battle cards show both teams, portraits, HP bars, Energy, turn owner and the latest action.
+- Battle actions also produce a Discord combat message such as `@player used Bennett — Fantastic Voyage!` with damage/heal/shield information.
+- PWR is calculated from the strongest roster, levels, stats, weapon rarity/level, Artifacts, Constellations and permanent upgrades.
+- Expanded Wish pools with a much larger character and weapon roster.
 
 ## Setup
 
@@ -24,34 +25,34 @@ npm install
 npm start
 ```
 
-Set `DISCORD_TOKEN` in `.env` or in Railway Variables. The token must never be committed.
-
-### Discord Developer Portal
-
-Enable **Message Content Intent** for the bot, because the current test entry point is the prefix command `-neverless`.
-
-## Railway
-
-Use Node 20+ and set:
+Set:
 
 - `DISCORD_TOKEN`
 - `GAME_CHANNEL_ID=1539226931319545936`
 - `DATA_FILE=./runtime/players.json`
 
-For persistent production data, mount a Railway Volume at `/app/runtime` and set `DATA_FILE=/app/runtime/players.json`. The JSON store is intentionally isolated behind `JsonStore`, so it can later be replaced by PostgreSQL without rewriting the game engine.
+Enable **Message Content Intent** in Discord Developer Portal because the current entry point uses `-neverless`.
 
-## Assets
+## Image cards
 
-The prototype references remote game-data image endpoints rather than committing copied image files into this repository. Character/weapon images use `genshin.jmp.blue` routes and artifact icons use Enka-compatible UI asset paths. This keeps assets replaceable and the codebase small.
+The generated interface is implemented in `src/ui/cards.js` with `sharp`. It downloads character/weapon/enemy art at runtime when available and falls back cleanly if an external image fails. The final theme uses Neverless purple with muted Genshin-like gold on a dark game panel.
+
+The dashboard design went through multiple layout/color iterations before the final dark purple/gold version was selected. The layout follows the requested sketch: profile column on the left, account level/XP/PWR/resources underneath, and framed character slots on the right.
 
 ## Architecture
 
-- `src/data/` — character, weapon, artifact and domain definitions.
-- `src/game/` — battle engine, wishing, stats, progression and CPU AI.
-- `src/ui/` — Discord embed renderers and components.
+- `src/data/` — character, weapon, Artifact and Domain definitions.
+- `src/game/` — battle engine, wishing, power/stat calculations and progression.
+- `src/ui/cards.js` — generated PNG game interface.
+- `src/ui/components.js` — Discord select menus/buttons.
+- `src/ui/render.js` — text/embed fallback renderer.
 - `src/db/` — persistence adapter.
-- `src/index.js` — Discord event routing and session state.
+- `src/index.js` — Discord routing and session state.
 
-## PvP direction
+## Persistence
 
-The engine already supports two teams and target selection. The CPU side is intentionally implemented through the same battle engine that a human opponent will use. The next production layer is the queue/draft wrapper: 30-second accept window, snake draft, ownership validation and 15-second action timers. That layer should use a durable queue store such as PostgreSQL or Redis before public rollout.
+For Railway production persistence, mount a volume at `/app/runtime` and set:
+
+`DATA_FILE=/app/runtime/players.json`
+
+The JSON persistence layer remains isolated so it can later be migrated to PostgreSQL/Redis for public PvP queues and durable matchmaking.
